@@ -12,6 +12,7 @@ import { useNotificationProvider } from "@/components/refine-ui/notification/use
 import { ThemeProvider } from "@/components/refine-ui/theme/theme-provider";
 import { authProviderClient } from "@providers/auth-provider/auth-provider.client";
 import { dataProvider } from "@providers/data-provider";
+import { TRPCProvider } from "@/utils/trpc";
 
 type RefineContextProps = {
   children: React.ReactNode;
@@ -21,45 +22,73 @@ export const RefineContext = ({ children }: RefineContextProps) => {
   const notificationProvider = useNotificationProvider();
 
   return (
-    <RefineKbarProvider>
-      <ThemeProvider>
-        <Refine
-          authProvider={authProviderClient}
-          dataProvider={dataProvider}
-          notificationProvider={notificationProvider}
-          routerProvider={routerProvider}
-          resources={[
-            {
-              name: "blog_posts",
-              list: "/blog-posts",
-              create: "/blog-posts/create",
-              edit: "/blog-posts/edit/:id",
-              show: "/blog-posts/show/:id",
-              meta: {
-                canDelete: true,
+    <TRPCProvider>
+      <RefineKbarProvider>
+        <ThemeProvider>
+          <Refine
+            authProvider={authProviderClient}
+            dataProvider={dataProvider}
+            notificationProvider={notificationProvider}
+            routerProvider={routerProvider}
+            resources={[
+              {
+                name: "bigquery_connections",
+                list: "/sources",
+                create: "/sources/create",
+                edit: "/sources/edit/:id",
+                show: "/sources/show/:id",
+                meta: {
+                  label: "Sources",
+                  canDelete: true,
+                },
               },
-            },
-            {
-              name: "categories",
-              list: "/categories",
-              create: "/categories/create",
-              edit: "/categories/edit/:id",
-              show: "/categories/show/:id",
-              meta: {
-                canDelete: true,
+              {
+                name: "google_ads_connections",
+                list: "/destinations",
+                create: "/destinations/create",
+                edit: "/destinations/edit/:id",
+                show: "/destinations/show/:id",
+                meta: {
+                  label: "Destinations",
+                  canDelete: true,
+                },
               },
-            },
-          ]}
-          options={{
-            syncWithLocation: true,
-            warnWhenUnsavedChanges: true,
-          }}
-        >
-          {children}
-          <Toaster />
-          <RefineKbar />
-        </Refine>
-      </ThemeProvider>
-    </RefineKbarProvider>
+              {
+                name: "syncs",
+                list: "/connections",
+                create: "/connections/create",
+                edit: "/connections/edit/:id",
+                show: "/connections/show/:id",
+                meta: {
+                  label: "Connections",
+                  canDelete: true,
+                },
+              },
+              {
+                name: "sync_runs",
+                list: "/syncs",
+                show: "/syncs/show/:id",
+                meta: {
+                  label: "Syncs",
+                  canDelete: false,
+                },
+              },
+            ]}
+            options={{
+              syncWithLocation: true,
+              warnWhenUnsavedChanges: true,
+              disableTelemetry: false,
+              title: {
+                text: "Metricade",
+              },
+            }}
+          >
+            {children}
+            <Toaster />
+            <RefineKbar />
+          </Refine>
+        </ThemeProvider>
+      </RefineKbarProvider>
+    </TRPCProvider>
   );
 };

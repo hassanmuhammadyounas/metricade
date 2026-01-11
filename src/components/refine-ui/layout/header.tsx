@@ -95,7 +95,7 @@ function MobileHeader() {
           }
         )}
       >
-        <div>{title.icon}</div>
+        {title.icon && <div>{title.icon}</div>}
         <h2
           className={cn(
             "text-sm",

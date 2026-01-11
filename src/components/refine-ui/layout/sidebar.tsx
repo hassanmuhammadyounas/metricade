@@ -15,6 +15,7 @@ import {
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent as ShadcnSidebarContent,
+  SidebarFooter as ShadcnSidebarFooter,
   SidebarHeader as ShadcnSidebarHeader,
   SidebarRail as ShadcnSidebarRail,
   SidebarTrigger as ShadcnSidebarTrigger,
@@ -27,7 +28,7 @@ import {
   useRefineOptions,
   type TreeMenuItem,
 } from "@refinedev/core";
-import { ChevronRight, ListIcon } from "lucide-react";
+import { ChevronRight, ListIcon, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import React from "react";
 
 export function Sidebar() {
@@ -63,6 +64,7 @@ export function Sidebar() {
           />
         ))}
       </ShadcnSidebarContent>
+      <SidebarFooter />
     </ShadcnSidebar>
   );
 }
@@ -222,7 +224,7 @@ function SidebarHeader() {
         "border-border",
         "flex-row",
         "items-center",
-        "justify-between",
+        "justify-start",
         "overflow-hidden"
       )}
     >
@@ -243,7 +245,7 @@ function SidebarHeader() {
           }
         )}
       >
-        <div>{title.icon}</div>
+        {title.icon && <div>{title.icon}</div>}
         <h2
           className={cn(
             "text-sm",
@@ -259,16 +261,46 @@ function SidebarHeader() {
           {title.text}
         </h2>
       </div>
-
-      <ShadcnSidebarTrigger
-        className={cn("text-muted-foreground", "mr-1.5", {
-          "opacity-0": !open,
-          "opacity-100": open || isMobile,
-          "pointer-events-auto": open || isMobile,
-          "pointer-events-none": !open && !isMobile,
-        })}
-      />
     </ShadcnSidebarHeader>
+  );
+}
+
+function SidebarFooter() {
+  const { open, toggleSidebar } = useShadcnSidebar();
+
+  return (
+    <ShadcnSidebarFooter
+      className={cn(
+        "p-2",
+        "border-t",
+        "border-border",
+        "mt-auto"
+      )}
+    >
+      <Button
+        variant="ghost"
+        size={open ? "default" : "icon"}
+        onClick={toggleSidebar}
+        className={cn(
+          "w-full",
+          "justify-start",
+          "gap-2",
+          {
+            "px-3": open,
+            "px-2": !open,
+          }
+        )}
+      >
+        {open ? (
+          <>
+            <PanelLeftClose className="h-4 w-4" />
+            <span>Collapse</span>
+          </>
+        ) : (
+          <PanelLeftOpen className="h-4 w-4" />
+        )}
+      </Button>
+    </ShadcnSidebarFooter>
   );
 }
 
