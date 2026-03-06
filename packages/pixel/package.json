@@ -1,17 +1,12 @@
 {
-  "name": "@behavioral-intelligence/pixel",
+  "name": "metricade-pixel",
   "version": "1.0.0",
   "description": "Browser-side behavioral event collector",
   "main": "dist/pixel.min.js",
   "scripts": {
-    "build": "esbuild src/pixel.js --bundle --minify --sourcemap --outfile=dist/pixel.min.js",
-    "build:dev": "esbuild src/pixel.dev.js --bundle --outfile=dist/pixel.dev.js",
-    "test": "jest tests/",
-    "test:watch": "jest tests/ --watch"
+    "build": "esbuild src/pixel.js --bundle --minify --sourcemap --outfile=dist/pixel.min.js"
   },
   "devDependencies": {
-    "esbuild": "^0.27.3",
-    "jest": "^30.2.0",
-    "jest-environment-jsdom": "^30.2.0"
+    "esbuild": "^0.27.3"
   }
 }

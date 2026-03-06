@@ -16,6 +16,8 @@ export type Env = {
   HEARTBEAT_TIMEOUT_S: string;
   TRACE_HEADER: string;
   ENVIRONMENT: string;
+  AXIOM_TOKEN: string;
+  AXIOM_DATASET: string;
 };
 
 const app = new Hono<{ Bindings: Env }>();
@@ -24,7 +26,7 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
 app.use('*', trace());
 
-// Public routes
+// Public routes — ingest handles its own auth (supports header + query param for sendBeacon)
 app.post('/ingest', ingest);
 app.get('/health', health);
 

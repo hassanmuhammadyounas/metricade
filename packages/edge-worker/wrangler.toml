@@ -1,24 +1,16 @@
-name            = "behavioral-edge-worker"
-main            = "src/index.ts"
+name               = "metricade-worker"
+main               = "src/index.ts"
 compatibility_date = "2025-09-01"
-workers_dev     = false                  # Use custom route, not workers.dev
-
-[[routes]]
-pattern  = "your-domain.com/api/behavioral/*"
-zone_id  = "$CF_ZONE_ID"
+workers_dev        = true
 
 [vars]
-ENVIRONMENT          = "production"
-STREAM_NAME          = "behavioral_stream"
-DLQ_KEY              = "behavioral_dlq"
-HEARTBEAT_KEY        = "fly_worker_heartbeat"
-HEARTBEAT_TIMEOUT_S  = "60"
-TRACE_HEADER         = "x-trace-id"
-
-[secrets]                               # Set via: wrangler secret put SECRET_NAME
-# UPSTASH_REDIS_URL
-# UPSTASH_REDIS_TOKEN
-# INGEST_SHARED_SECRET
+ENVIRONMENT         = "production"
+STREAM_NAME         = "metricade_stream"
+DLQ_KEY             = "metricade_dlq"
+HEARTBEAT_KEY       = "metricade_heartbeat"
+HEARTBEAT_TIMEOUT_S = "60"
+TRACE_HEADER        = "x-trace-id"
+AXIOM_DATASET       = "metricade"
 
 [[triggers]]
-crons = ["*/1 * * * *"]                 # Every 1 min — heartbeat check + DLQ drain trigger
+crons = ["*/1 * * * *"]                 # Every 1 min — heartbeat check + DLQ drain

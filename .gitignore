@@ -15,6 +15,8 @@ infra/terraform.tfvars
 node_modules/
 dist/
 *.min.js.map
+package-lock.json
+yarn.lock
 
 # Python
 __pycache__/
@@ -41,3 +43,6 @@ Thumbs.db
 
 # Wrangler
 .wrangler/
+
+# Claude
+.claude/

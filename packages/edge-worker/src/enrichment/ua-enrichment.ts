@@ -1,50 +1,51 @@
+import { UAParser } from 'ua-parser-js';
+
 export type UaMeta = {
   browser_family: string;
+  browser_version: string;
   os_family: string;
+  os_version: string;
   device_type: 'desktop' | 'mobile' | 'tablet' | 'bot' | 'unknown';
+  device_vendor: string;
   is_webview: boolean;
-  webview_type: string | null;
 };
 
-const WEBVIEW_PATTERNS: Array<[string, RegExp]> = [
-  ['facebook', /FBAN|FBAV/],
-  ['instagram', /Instagram/],
-  ['wechat', /MicroMessenger/],
-  ['tiktok', /musical_ly|TikTok/],
-];
+const BOT_RE = /bot|crawl|spider|slurp|googlebot|bingbot/i;
+
+// Patterns that ua-parser-js doesn't classify — reliable server-side webview signals
+const WEBVIEW_RE = /FBAN|FBAV|FBIOS|FBSS|Instagram|MicroMessenger|musical_ly|TikTok|Twitter\//;
 
 export function enrichUa(ua: string): UaMeta {
-  const isBot = /bot|crawl|spider|slurp|googlebot|bingbot/i.test(ua);
-  const isMobile = /Mobile|Android|iPhone|iPad/i.test(ua);
-  const isTablet = /iPad|Tablet/i.test(ua);
-
-  let webviewType: string | null = null;
-  for (const [type, pattern] of WEBVIEW_PATTERNS) {
-    if (pattern.test(ua)) { webviewType = type; break; }
+  if (!ua || BOT_RE.test(ua)) {
+    return {
+      browser_family: 'bot', browser_version: '',
+      os_family: 'unknown', os_version: '',
+      device_type: 'bot', device_vendor: '',
+      is_webview: false,
+    };
   }
 
+  const r = new UAParser(ua).getResult();
+
+  const rawType = r.device.type;
+  let device_type: UaMeta['device_type'];
+  if (rawType === 'mobile') device_type = 'mobile';
+  else if (rawType === 'tablet') device_type = 'tablet';
+  else if (rawType === undefined) device_type = 'desktop';
+  else device_type = 'unknown'; // console, smarttv, wearable, embedded
+
+  const is_webview =
+    WEBVIEW_RE.test(ua) ||
+    (/Android/.test(ua) && /wv/.test(ua)) ||
+    (/iPhone|iPod|iPad/.test(ua) && !/Safari\//.test(ua) && /AppleWebKit/.test(ua));
+
   return {
-    browser_family: parseBrowserFamily(ua),
-    os_family: parseOsFamily(ua),
-    device_type: isBot ? 'bot' : isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
-    is_webview: webviewType !== null,
-    webview_type: webviewType,
+    browser_family:  (r.browser.name    ?? 'unknown').toLowerCase(),
+    browser_version: (r.browser.version ?? ''),
+    os_family:       (r.os.name         ?? 'unknown').toLowerCase(),
+    os_version:      (r.os.version      ?? ''),
+    device_type,
+    device_vendor:   (r.device.vendor   ?? '').toLowerCase(),
+    is_webview,
   };
-}
-
-function parseBrowserFamily(ua: string): string {
-  if (/Chrome/.test(ua) && !/Chromium|Edge/.test(ua)) return 'chrome';
-  if (/Firefox/.test(ua)) return 'firefox';
-  if (/Safari/.test(ua) && !/Chrome/.test(ua)) return 'safari';
-  if (/Edge/.test(ua)) return 'edge';
-  return 'other';
-}
-
-function parseOsFamily(ua: string): string {
-  if (/Windows/.test(ua)) return 'windows';
-  if (/Mac OS X/.test(ua) && !/iPhone|iPad/.test(ua)) return 'macos';
-  if (/iPhone|iPad/.test(ua)) return 'ios';
-  if (/Android/.test(ua)) return 'android';
-  if (/Linux/.test(ua)) return 'linux';
-  return 'other';
 }

@@ -1,8 +1,9 @@
 import { Env } from '../index';
 
-// LPUSH to behavioral_dlq when no active consumers detected
-export async function publishToDlq(env: Env, message: unknown): Promise<void> {
-  const res = await fetch(`${env.UPSTASH_REDIS_URL}/lpush/${env.DLQ_KEY}`, {
+// LPUSH to behavioral_dlq:{org_id} when no active consumers detected
+export async function publishToDlq(env: Env, orgId: string, message: unknown): Promise<void> {
+  const dlqKey = `${env.DLQ_KEY}:${orgId}`;
+  const res = await fetch(`${env.UPSTASH_REDIS_URL}/lpush/${dlqKey}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.UPSTASH_REDIS_TOKEN}`,
