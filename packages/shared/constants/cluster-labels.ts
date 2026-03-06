@@ -1,0 +1,9 @@
+export const CLUSTER_LABELS = {
+  FRAUD_BOT: 'FRAUD_BOT',
+  HIGH_INTENT: 'HIGH_INTENT',
+  MEDIUM_INTENT: 'MEDIUM_INTENT',
+  LOW_INTENT: 'LOW_INTENT',
+  UNASSIGNED: 'UNASSIGNED',
+} as const;
+
+export type ClusterLabel = typeof CLUSTER_LABELS[keyof typeof CLUSTER_LABELS];

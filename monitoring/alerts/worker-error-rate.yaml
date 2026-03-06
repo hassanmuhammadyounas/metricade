@@ -1,0 +1,17 @@
+name: worker-error-rate
+description: Cloudflare Worker 5xx error rate exceeds 1%
+severity: critical
+
+condition:
+  metric: cloudflare_worker_5xx_rate_percent
+  operator: ">"
+  threshold: 1
+  for: 2m
+
+annotations:
+  summary: "Cloudflare Worker is returning 5xx errors — possible bad deploy"
+  runbook: docs/runbooks/CLOUDFLARE_ROLLBACK.md
+  action: |
+    1. Immediate: check logs: cd packages/edge-worker && ./scripts/tail-logs.sh
+    2. If recent deploy: ./scripts/rollback.sh
+    3. Follow: docs/runbooks/CLOUDFLARE_ROLLBACK.md

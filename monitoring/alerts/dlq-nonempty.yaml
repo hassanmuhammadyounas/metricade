@@ -1,0 +1,17 @@
+name: dlq-nonempty
+description: Dead letter queue has messages for more than 5 minutes
+severity: warning
+
+condition:
+  metric: behavioral_dlq_count
+  operator: ">"
+  threshold: 0
+  for: 5m
+
+annotations:
+  summary: "DLQ is non-empty — inference worker may be down"
+  runbook: docs/runbooks/FLY_WORKER_DOWN.md
+  action: |
+    1. Check fly status: fly status --app behavioral-inference
+    2. Run: ./scripts/dlq-monitor.sh
+    3. Follow: docs/runbooks/FLY_WORKER_DOWN.md

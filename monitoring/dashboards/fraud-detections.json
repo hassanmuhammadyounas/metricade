@@ -1,0 +1,26 @@
+{
+  "title": "Fraud Detections",
+  "description": "FRAUD_BOT cluster growth and detection rates over time",
+  "panels": [
+    {
+      "id": 1,
+      "title": "FRAUD_BOT Sessions (cumulative)",
+      "type": "timeseries",
+      "metric": "vector_cluster_label_count",
+      "filter": { "label": "FRAUD_BOT" }
+    },
+    {
+      "id": 2,
+      "title": "Cluster Label Distribution",
+      "type": "piechart",
+      "metric": "vector_cluster_label_count",
+      "groupBy": "label"
+    },
+    {
+      "id": 3,
+      "title": "FRAUD_BOT % of Total Sessions",
+      "type": "stat",
+      "expression": "vector_cluster_label_count{label='FRAUD_BOT'} / vector_total_count * 100"
+    }
+  ]
+}

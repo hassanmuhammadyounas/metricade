@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "event-payload",
+  "title": "Event Payload",
+  "description": "Exact JSON schema pixel.js sends to the Cloudflare Worker",
+  "type": "object",
+  "required": ["trace_id", "events"],
+  "properties": {
+    "trace_id": {
+      "type": "string",
+      "description": "Format: {session_id}_{flush_counter}_{timestamp_ms}"
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/event" }
+    }
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "required": ["event_type", "ts", "client_id", "session_id", "page_id", "page_load_index"],
+      "properties": {
+        "event_type": {
+          "type": "string",
+          "enum": ["INIT", "PAGE_VIEW", "SCROLL", "TOUCH_END", "CLICK", "TAB_HIDDEN", "TAB_VISIBLE", "COMMERCIAL"]
+        },
+        "ts": { "type": "number", "description": "Unix timestamp ms" },
+        "client_id": { "type": "string" },
+        "session_id": { "type": "string" },
+        "page_id": { "type": "string" },
+        "page_load_index": { "type": "integer", "minimum": 1 },
+        "delta_ms": { "type": "number" },
+        "scroll_velocity_px_s": { "type": "number" },
+        "scroll_acceleration": { "type": "number" },
+        "y_reversal": { "type": "integer", "enum": [0, 1] },
+        "scroll_depth_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "tap_interval_ms": { "type": "number" },
+        "contact_radius": { "type": "number" },
+        "force": { "type": "number" },
+        "dead_tap": { "type": "integer", "enum": [0, 1] },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "page_path_hash": { "type": "string" },
+        "event_name": { "type": "string", "description": "Commercial event name" }
+      }
+    }
+  }
+}

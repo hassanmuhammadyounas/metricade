@@ -1,0 +1,32 @@
+{
+  "title": "Vector Store",
+  "description": "Total vectors, cluster label distribution, storage growth",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total Vectors in Index",
+      "type": "stat",
+      "metric": "vector_total_count"
+    },
+    {
+      "id": 2,
+      "title": "Vectors Added / Day",
+      "type": "timeseries",
+      "metric": "vector_total_count",
+      "transform": "rate[1d]"
+    },
+    {
+      "id": 3,
+      "title": "Cluster Size Distribution",
+      "type": "bargauge",
+      "metric": "clustering_cluster_size",
+      "groupBy": "cluster_label"
+    },
+    {
+      "id": 4,
+      "title": "Last Clustering Run",
+      "type": "stat",
+      "metric": "clustering_last_run_at"
+    }
+  ]
+}

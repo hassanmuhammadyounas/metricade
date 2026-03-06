@@ -1,0 +1,43 @@
+# Environment
+.env
+.env.local
+.env.*.local
+infra/terraform.tfvars
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+.terraform.lock.hcl
+
+# Node
+node_modules/
+dist/
+*.min.js.map
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Model weights (large binary files — store in object storage, not git)
+packages/inference-worker/models/*.pt
+!packages/inference-worker/models/bootstrap_random.pt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Wrangler
+.wrangler/
