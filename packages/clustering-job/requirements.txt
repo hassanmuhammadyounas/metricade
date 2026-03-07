@@ -1,6 +1,0 @@
-hdbscan==0.8.41
-scikit-learn==1.8.0
-numpy==2.4.2
-redis==7.1.1
-upstash-vector==0.8.0
-upstash-redis==1.4.0

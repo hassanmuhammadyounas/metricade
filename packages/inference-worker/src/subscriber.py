@@ -1,15 +1,13 @@
 """
 Redis Streams XREADGROUP loop — consume → infer → upsert → ACK.
+Dynamically discovers all metricade_stream:{org_id} keys via SCAN.
 """
 import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
 
-from axiom_py import Client as AxiomClient
-
-from .storage.redis_client import get_redis_client, ensure_consumer_group, ack_message, drain_dlq
+from .storage.redis_client import get_redis_client, ensure_consumer_group, ack_message
 from .storage.vector_client import upsert_vector
 from .inference.transformer import BehavioralTransformer
 from .inference.featurizer import featurize
@@ -17,23 +15,6 @@ from .inference.model_loader import load_model
 from .constants import STREAM_NAME, CONSUMER_GROUP, CONSUMER_NAME, DLQ_KEY
 
 logger = logging.getLogger(__name__)
-
-_axiom = AxiomClient(os.getenv("AXIOM_TOKEN", "")) if os.getenv("AXIOM_TOKEN") else None
-_AXIOM_DATASET = os.getenv("AXIOM_DATASET", "metricade")
-
-
-def _log(event: str, **fields):
-    if not _axiom:
-        return
-    try:
-        _axiom.ingest_events(_AXIOM_DATASET, [{
-            "_time": datetime.now(timezone.utc).isoformat(),
-            "service": "inference-worker",
-            "event": event,
-            **fields,
-        }])
-    except Exception:
-        pass  # Never let observability break the pipeline
 
 # Module-level state
 _last_inference_ms: float = 0.0
@@ -44,52 +25,173 @@ def get_stats() -> dict:
     return {"last_inference_ms": _last_inference_ms, "queue_depth": _queue_depth}
 
 
+def _scan_keys(r, pattern: str) -> list[str]:
+    """Return all Redis keys matching pattern."""
+    found = []
+    cursor = 0
+    while True:
+        cursor, keys = r.scan(cursor, match=pattern, count=100)
+        found.extend(k.decode() if isinstance(k, bytes) else k for k in keys)
+        if cursor == 0:
+            break
+    return found
+
+
+def _refresh_streams(r, known: set) -> set:
+    """Discover org stream keys and ensure consumer groups exist on all of them."""
+    all_keys = set(_scan_keys(r, f"{STREAM_NAME}:*"))
+    for key in all_keys - known:
+        logger.info("Discovered new org stream: %s", key)
+    # Ensure consumer group on ALL keys — handles stream deletion/recreation
+    for key in all_keys:
+        ensure_consumer_group(r, key, CONSUMER_GROUP)
+    return all_keys
+
+
+def _claim_idle_pending(r, streams: set) -> dict[str, list]:
+    """Re-claim messages idle >60s and return them keyed by stream for immediate processing."""
+    pending: dict[str, list] = {}
+    for stream_key in streams:
+        try:
+            result = r.xautoclaim(
+                stream_key, CONSUMER_GROUP, CONSUMER_NAME,
+                min_idle_time=60000, start_id="0-0", count=10,
+            )
+            # result: (next_id, [(entry_id, fields), ...], deleted_ids)
+            entries = result[1] if result and result[1] else []
+            if entries:
+                logger.warning("Re-claimed %d idle PEL messages from %s — processing now", len(entries), stream_key)
+                pending[stream_key] = entries
+        except Exception:
+            pass  # Redis < 6.2 or stream not yet created
+    return pending
+
+
+def _drain_all_dlqs(r):
+    """Move messages from all metricade_dlq:{org_id} lists back to their streams."""
+    dlq_keys = _scan_keys(r, f"{DLQ_KEY}:*")
+    for dlq_key in dlq_keys:
+        # Derive corresponding stream key: metricade_dlq:{org_id} → metricade_stream:{org_id}
+        org_id = dlq_key[len(DLQ_KEY) + 1:]
+        stream_key = f"{STREAM_NAME}:{org_id}"
+        moved = 0
+        while True:
+            raw = r.rpop(dlq_key)
+            if raw is None:
+                break
+            try:
+                parsed = json.loads(raw)
+                # Upstash REST LPUSH wraps values in a JSON array: [JSON.stringify(msg)]
+                # Unwrap if needed so we always store a plain enriched dict
+                if isinstance(parsed, list):
+                    for item in parsed:
+                        msg = json.loads(item) if isinstance(item, str) else item
+                        r.xadd(stream_key, {"payload": json.dumps(msg)})
+                        moved += 1
+                else:
+                    r.xadd(stream_key, {"payload": json.dumps(parsed)})
+                    moved += 1
+            except Exception as e:
+                logger.error("DLQ drain error on %s: %s", dlq_key, e)
+        if moved:
+            logger.info("Drained %d messages from %s → %s", moved, dlq_key, stream_key)
+
+
+_SESSION_EVENT_TTL = 4 * 3600  # 4 hours — auto-expire abandoned session accumulators
+
+
+def _accumulate_events(redis, org_id: str, session_id: str, new_events: list) -> list:
+    """Merge new events into the per-session accumulator in Redis, return full event list."""
+    key = f"metricade_sess:{org_id}:{session_id}"
+    existing_raw = redis.get(key)
+    existing = json.loads(existing_raw) if existing_raw else []
+    merged = existing + new_events
+    redis.setex(key, _SESSION_EVENT_TTL, json.dumps(merged))
+    return merged
+
+
+def _process_entries(redis, stream_key: str, entries: list, model: "BehavioralTransformer") -> None:
+    global _last_inference_ms, _queue_depth
+    _queue_depth = len(entries)
+    for entry_id, fields in entries:
+        try:
+            enriched = json.loads(fields.get(b"payload", b"{}"))
+            if isinstance(enriched, list):
+                enriched = json.loads(enriched[0]) if isinstance(enriched[0], str) else enriched[0]
+            inner_payload = enriched.get("payload", {})
+            flush_events = inner_payload.get("events", [])
+            first_event = flush_events[0] if flush_events else {}
+            org_id = enriched.get("org_id", "unknown")
+            session_id = first_event.get("session_id") or enriched.get("trace_id", str(entry_id))
+
+            # Accumulate events across flushes so the vector covers the full session
+            all_events = _accumulate_events(redis, org_id, session_id, flush_events)
+            merged_payload = {**inner_payload, "events": all_events}
+
+            t0 = time.perf_counter()
+            features = featurize(merged_payload, enriched)
+            vector = model.encode(features)
+            _last_inference_ms = (time.perf_counter() - t0) * 1000
+            meta = {
+                "org_id": org_id,
+                "trace_id": enriched.get("trace_id"),
+                "received_at": enriched.get("received_at"),
+                "client_id": first_event.get("client_id"),
+                "session_id": session_id,
+                "ip_country": (enriched.get("ip_meta") or {}).get("ip_country"),
+                "ip_type": (enriched.get("ip_meta") or {}).get("ip_type"),
+                "device_type": (enriched.get("ua_meta") or {}).get("device_type"),
+                "is_webview": (enriched.get("ua_meta") or {}).get("is_webview"),
+                "cluster_label": None,
+            }
+            # Use session_id as vector ID — upsert overwrites on each flush → one vector per session
+            upsert_vector(session_id, vector, meta)
+            ack_message(redis, stream_key, CONSUMER_GROUP, entry_id)
+        except Exception as e:
+            logger.error("Failed to process message %s: %s", entry_id, e)
+
+
 def run_subscriber():
     global _last_inference_ms, _queue_depth
 
     redis = get_redis_client()
-    ensure_consumer_group(redis, STREAM_NAME, CONSUMER_GROUP)
     model: BehavioralTransformer = load_model()
 
-    logger.info("Subscriber ready — reading from %s/%s", STREAM_NAME, CONSUMER_GROUP)
+    known_streams: set[str] = set()
+    loop_count = 0
+
+    logger.info("Subscriber ready — scanning for %s:* streams", STREAM_NAME)
 
     while True:
         try:
-            # XREADGROUP — block up to 2s waiting for new messages
+            # Re-discover org streams every 60 loops (~2 min with 2s block)
+            if loop_count % 60 == 0:
+                known_streams = _refresh_streams(redis, known_streams)
+                reclaimed = _claim_idle_pending(redis, known_streams)
+                _drain_all_dlqs(redis)
+                # Process reclaimed entries immediately (XREADGROUP > won't re-deliver them)
+                if reclaimed:
+                    for stream_key, entries in reclaimed.items():
+                        _process_entries(redis, stream_key, entries, model)
+            loop_count += 1
+
+            if not known_streams:
+                time.sleep(2)
+                continue
+
+            # XREADGROUP across all discovered org streams simultaneously
             messages = redis.xreadgroup(
                 CONSUMER_GROUP, CONSUMER_NAME,
-                {STREAM_NAME: ">"},
+                {s: ">" for s in known_streams},
                 count=10, block=2000,
             )
 
             if not messages:
                 continue
 
-            for stream_name, entries in messages:
-                _queue_depth = len(entries)
-                for entry_id, fields in entries:
-                    try:
-                        payload = json.loads(fields.get(b"payload", b"{}"))
-                        t0 = time.perf_counter()
-                        features = featurize(payload)
-                        vector = model.encode(features)
-                        _last_inference_ms = (time.perf_counter() - t0) * 1000
-                        upsert_vector(payload.get("trace_id", str(entry_id)), vector, payload)
-                        ack_message(redis, STREAM_NAME, CONSUMER_GROUP, entry_id)
-                        _log(
-                            "inference",
-                            trace_id=payload.get("trace_id"),
-                            org_id=payload.get("org_id"),
-                            entry_id=str(entry_id),
-                            inference_ms=round(_last_inference_ms, 2),
-                        )
-                    except Exception as e:
-                        logger.error("Failed to process message %s: %s", entry_id, e)
-                        _log("inference_error", entry_id=str(entry_id), error=str(e))
-                        # Leave unACKed — will be redelivered after PEL timeout
-
-            # Drain DLQ on each loop — move messages back to stream
-            drain_dlq(redis, DLQ_KEY, STREAM_NAME)
+            for stream_key, entries in messages:
+                stream_key = stream_key.decode() if isinstance(stream_key, bytes) else stream_key
+                _process_entries(redis, stream_key, entries, model)
 
         except Exception as e:
             logger.error("Subscriber loop error: %s", e)

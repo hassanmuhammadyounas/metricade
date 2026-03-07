@@ -1,0 +1,18 @@
+name               = "metricade-monitor"
+main               = "src/index.ts"
+compatibility_date = "2025-09-01"
+workers_dev        = true
+
+[vars]
+UPSTASH_REDIS_URL         = "https://singular-fawn-58838.upstash.io"
+UPSTASH_VECTOR_URL        = "https://bright-tiger-54944-us1-vector.upstash.io"
+PIXEL_CDN_URL             = "https://pixel.metricade.com/pixel.min.js"
+WORKER_HEALTH_URL         = "https://worker.metricade.com/health"
+INFERENCE_HEALTH_URL      = "https://behavioral-inference.fly.dev/health"
+BETTERSTACK_HEARTBEAT_URL = "https://uptime.betterstack.com/api/v1/heartbeat/FhH2PuxmF8ZE5tJs5rZ7fYrx"
+HEARTBEAT_KEY             = "metricade_heartbeat"
+HEARTBEAT_TIMEOUT_S       = "60"
+DLQ_PREFIX                = "metricade_dlq"
+
+[triggers]
+crons = ["0 * * * *"]   # Every hour (on the hour)

@@ -1,3 +1,4 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.10.0+cpu
 numpy==2.4.2
 redis==7.1.1
@@ -6,4 +7,3 @@ upstash-redis==1.4.0
 httpx==0.28.1
 fastapi==0.135.1
 uvicorn==0.41.0
-axiom-py==1.0.0

@@ -13,13 +13,16 @@ export async function publishToStream(env: Env, orgId: string, message: unknown)
   }
 
   const body = JSON.stringify(message);
-  const res = await fetch(`${env.UPSTASH_REDIS_URL}/xadd/${streamKey}/*`, {
+  const res = await fetch(`${env.UPSTASH_REDIS_URL}/pipeline`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.UPSTASH_REDIS_TOKEN}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(['payload', body]),
+    body: JSON.stringify([
+      ['XADD', streamKey, '*', 'payload', body],
+      ['INCR', `metricade_ingest_total:${orgId}`],
+    ]),
   });
 
   if (!res.ok) {

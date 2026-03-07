@@ -16,11 +16,13 @@ export type Env = {
   HEARTBEAT_TIMEOUT_S: string;
   TRACE_HEADER: string;
   ENVIRONMENT: string;
-  AXIOM_TOKEN: string;
-  AXIOM_DATASET: string;
 };
 
-const app = new Hono<{ Bindings: Env }>();
+export type Variables = {
+  traceId: string;
+};
+
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // Global middleware
 app.use('*', cors());

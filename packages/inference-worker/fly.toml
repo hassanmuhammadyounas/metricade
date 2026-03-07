@@ -1,31 +1,30 @@
-app      = "behavioral-inference"
-primary_region = "iad"                  # Must match Upstash region
+# fly.toml app configuration file generated for behavioral-inference on 2026-03-07T00:44:38+04:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'behavioral-inference'
+primary_region = 'iad'
 
 [build]
-dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
 [env]
-ENVIRONMENT          = "production"
-STREAM_NAME          = "behavioral_stream"
-CONSUMER_GROUP       = "inference_group"
-CONSUMER_NAME        = "fly_worker_1"
-DLQ_KEY              = "behavioral_dlq"
-HEARTBEAT_KEY        = "fly_worker_heartbeat"
-HEARTBEAT_INTERVAL_S = "30"
-VECTOR_DIMS          = "192"
-MODEL_PATH           = "/models/v1_simclr_trained.pt"
-SPOT_CHECK_RATE      = "0.01"           # 1-in-100 upsert verification
+  CONSUMER_GROUP = 'inference_group'
+  CONSUMER_NAME = 'fly_worker_1'
+  DLQ_KEY = 'metricade_dlq'
+  ENVIRONMENT = 'production'
+  HEARTBEAT_INTERVAL_S = '30'
+  HEARTBEAT_KEY = 'metricade_heartbeat'
+  MODEL_PATH = '/models/v1_simclr_trained.pt'
+  SPOT_CHECK_RATE = '0.01'
+  STREAM_NAME = 'metricade_stream'
+  VECTOR_DIMS = '192'
 
 [http_service]
-internal_port = 8080                    # Health endpoint only — not public
-force_https   = true
+  internal_port = 8080
+  force_https = true
 
 [[vm]]
-size   = "shared-cpu-1x"
-memory = "512mb"                        # 256mb is enough for CPU inference at low volume
-
-[secrets]                               # Set via: fly secrets set KEY=VALUE
-# UPSTASH_REDIS_URL
-# UPSTASH_REDIS_TOKEN
-# UPSTASH_VECTOR_URL
-# UPSTASH_VECTOR_TOKEN
+  size = 'shared-cpu-1x'
+  memory = '512mb'

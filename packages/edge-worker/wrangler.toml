@@ -10,7 +10,6 @@ DLQ_KEY             = "metricade_dlq"
 HEARTBEAT_KEY       = "metricade_heartbeat"
 HEARTBEAT_TIMEOUT_S = "60"
 TRACE_HEADER        = "x-trace-id"
-AXIOM_DATASET       = "metricade"
 
 [[triggers]]
 crons = ["*/1 * * * *"]                 # Every 1 min — heartbeat check + DLQ drain

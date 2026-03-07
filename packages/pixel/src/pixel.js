@@ -100,8 +100,9 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
 
   // 1. Click ID
   let _clickIdMatch = null;
+  let _clickIdType  = 'none';
   for (const param in AD_CLICK_IDS) {
-    if (_params.has(param)) { _clickIdMatch = AD_CLICK_IDS[param]; break; }
+    if (_params.has(param)) { _clickIdMatch = AD_CLICK_IDS[param]; _clickIdType = param; break; }
   }
 
   // 2. UTM params
@@ -170,16 +171,18 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
 
   // ─── init ─────────────────────────────────────────────────────────────────
   push({
-    event_type:       'init',
-    delta_ms:         0,
-    page_path_hash:   hashPath(location.pathname),
-    is_touch:         _isTouch ? 1 : 0,
-    browser_timezone: _timezone,
-    viewport_w_norm:  Math.round((_vpW / 2560) * 1000) / 1000,
-    viewport_h_norm:  Math.round((_vpH / 1440) * 1000) / 1000,
-    is_paid:          _isPaid ? 1 : 0,
-    session_source:   _sessionSource,
-    session_medium:   _sessionMedium,
+    event_type:         'init',
+    delta_ms:           0,
+    page_path_hash:     hashPath(location.pathname),
+    is_touch:           _isTouch ? 1 : 0,
+    browser_timezone:   _timezone,
+    viewport_w_norm:    Math.round((_vpW / 2560) * 1000) / 1000,
+    viewport_h_norm:    Math.round((_vpH / 1440) * 1000) / 1000,
+    is_paid:            _isPaid ? 1 : 0,
+    session_source:     _sessionSource,
+    session_medium:     _sessionMedium,
+    device_pixel_ratio: window.devicePixelRatio || 1,
+    click_id_type:      _clickIdType,
   });
 
   // ─── page_view ────────────────────────────────────────────────────────────
