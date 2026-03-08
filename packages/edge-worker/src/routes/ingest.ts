@@ -45,10 +45,15 @@ export async function ingest(c: Context<{ Bindings: Env; Variables: Variables }>
   const browserTz: string = typeof initEvent?.browser_timezone === 'string' ? initEvent.browser_timezone : '';
   const timezoneMismatch = browserTz !== '' && browserTz !== ipMeta.ip_timezone;
 
+  const originHeader = c.req.header('origin') ?? c.req.header('referer') ?? '';
+  let hostname = '';
+  try { hostname = originHeader ? new URL(originHeader).hostname : ''; } catch { hostname = ''; }
+
   const enriched = {
     trace_id: traceId,
     org_id: orgId,
     received_at: now,
+    hostname,
     ip_meta: ipMeta,
     ua_meta: uaMeta,
     time_features: encodeTime(now),

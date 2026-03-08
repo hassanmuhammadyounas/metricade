@@ -136,6 +136,7 @@ def _process_entries(redis, stream_key: str, entries: list, model: "BehavioralTr
                 "org_id": org_id,
                 "trace_id": enriched.get("trace_id"),
                 "received_at": enriched.get("received_at"),
+                "hostname": enriched.get("hostname"),
                 "client_id": first_event.get("client_id"),
                 "session_id": session_id,
                 "ip_country": (enriched.get("ip_meta") or {}).get("ip_country"),
