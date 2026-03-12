@@ -20,6 +20,13 @@ logger = logging.getLogger(__name__)
 _last_inference_ms: float = 0.0
 _queue_depth: int = 0
 
+# Optimization: track streams with consumer groups initialized
+_streams_with_groups: set[str] = set()
+
+# Optimization: in-memory cache for session data to reduce Redis GETs
+_session_cache: dict[str, tuple[list, float]] = {}  # key -> (events, expiry_ts)
+_SESSION_CACHE_TTL = 60  # Cache sessions for 60 seconds in memory
+
 
 def get_stats() -> dict:
     return {"last_inference_ms": _last_inference_ms, "queue_depth": _queue_depth}
@@ -39,12 +46,19 @@ def _scan_keys(r, pattern: str) -> list[str]:
 
 def _refresh_streams(r, known: set) -> set:
     """Discover org stream keys and ensure consumer groups exist on all of them."""
+    global _streams_with_groups
     all_keys = set(_scan_keys(r, f"{STREAM_NAME}:*"))
-    for key in all_keys - known:
-        logger.info("Discovered new org stream: %s", key)
-    # Ensure consumer group on ALL keys — handles stream deletion/recreation
-    for key in all_keys:
-        ensure_consumer_group(r, key, CONSUMER_GROUP)
+    new_streams = all_keys - known
+    if new_streams:
+        for key in new_streams:
+            logger.info("Discovered new org stream: %s", key)
+    # Only ensure consumer group on NEW streams (optimization: skip known streams)
+    for key in new_streams:
+        try:
+            ensure_consumer_group(r, key, CONSUMER_GROUP)
+            _streams_with_groups.add(key)
+        except Exception as e:
+            logger.warning("Failed to create consumer group on %s: %s", key, e)
     return all_keys
 
 
@@ -53,6 +67,12 @@ def _claim_idle_pending(r, streams: set) -> dict[str, list]:
     pending: dict[str, list] = {}
     for stream_key in streams:
         try:
+            # Optimization: check XPENDING first — only XAUTOCLAIM if there are pending messages
+            pending_info = r.xpending_range(stream_key, CONSUMER_GROUP, "-", "+", 1)
+            pending_count = pending_info[0] if pending_info and len(pending_info) > 0 else 0
+            if not pending_count or pending_count == 0:
+                continue  # No pending messages, skip expensive XAUTOCLAIM
+
             result = r.xautoclaim(
                 stream_key, CONSUMER_GROUP, CONSUMER_NAME,
                 min_idle_time=60000, start_id="0-0", count=10,
@@ -102,12 +122,44 @@ _SESSION_EVENT_TTL = 4 * 3600  # 4 hours — auto-expire abandoned session accum
 
 def _accumulate_events(redis, org_id: str, session_id: str, new_events: list) -> list:
     """Merge new events into the per-session accumulator in Redis, return full event list."""
+    global _session_cache
     key = f"metricade_sess:{org_id}:{session_id}"
-    existing_raw = redis.get(key)
-    existing = json.loads(existing_raw) if existing_raw else []
+    now = time.time()
+
+    # Check in-memory cache first (optimization: avoid Redis GET on hot sessions)
+    cache_entry = _session_cache.get(key)
+    if cache_entry:
+        cached_events, expiry_ts = cache_entry
+        if now < expiry_ts:
+            existing = cached_events
+        else:
+            # Cache expired, remove it
+            del _session_cache[key]
+            existing_raw = redis.get(key)
+            existing = json.loads(existing_raw) if existing_raw else []
+    else:
+        # Not in cache, fetch from Redis
+        existing_raw = redis.get(key)
+        existing = json.loads(existing_raw) if existing_raw else []
+
     merged = existing + new_events
     redis.setex(key, _SESSION_EVENT_TTL, json.dumps(merged))
+
+    # Update in-memory cache
+    _session_cache[key] = (merged, now + _SESSION_CACHE_TTL)
+
     return merged
+
+
+def _cleanup_session_cache():
+    """Remove expired entries from in-memory session cache."""
+    global _session_cache
+    now = time.time()
+    expired_keys = [k for k, (_, expiry) in _session_cache.items() if now >= expiry]
+    for k in expired_keys:
+        del _session_cache[k]
+    if expired_keys:
+        logger.debug("Cleaned up %d expired session cache entries", len(expired_keys))
 
 
 def _process_entries(redis, stream_key: str, entries: list, model: "BehavioralTransformer") -> None:
@@ -165,11 +217,13 @@ def run_subscriber():
 
     while True:
         try:
-            # Re-discover org streams every 60 loops (~2 min with 2s block)
-            if loop_count % 60 == 0:
+            # Re-discover org streams every 150 loops (~5 min with 2s block) — was 60, increased to reduce Redis scans
+            if loop_count % 150 == 0:
                 known_streams = _refresh_streams(redis, known_streams)
                 reclaimed = _claim_idle_pending(redis, known_streams)
                 _drain_all_dlqs(redis)
+                # Clean up expired session cache entries
+                _cleanup_session_cache()
                 # Process reclaimed entries immediately (XREADGROUP > won't re-deliver them)
                 if reclaimed:
                     for stream_key, entries in reclaimed.items():
