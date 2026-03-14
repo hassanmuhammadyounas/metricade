@@ -12,10 +12,9 @@ export type Env = {
   INGEST_SHARED_SECRET: string;
   STREAM_NAME: string;
   DLQ_KEY: string;
-  HEARTBEAT_KEY: string;
-  HEARTBEAT_TIMEOUT_S: string;
   TRACE_HEADER: string;
   ENVIRONMENT: string;
+  SLACK_WEBHOOK_URL: string;
 };
 
 export type Variables = {

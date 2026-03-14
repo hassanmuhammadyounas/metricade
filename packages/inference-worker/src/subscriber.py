@@ -174,7 +174,7 @@ def _process_entries(redis, stream_key: str, entries: list, model: "BehavioralTr
             flush_events = inner_payload.get("events", [])
             first_event = flush_events[0] if flush_events else {}
             org_id = enriched.get("org_id", "unknown")
-            session_id = first_event.get("session_id") or enriched.get("trace_id", str(entry_id))
+            session_id = inner_payload.get("session_id") or first_event.get("session_id") or enriched.get("trace_id", str(entry_id))
 
             # Accumulate events across flushes so the vector covers the full session
             all_events = _accumulate_events(redis, org_id, session_id, flush_events)
@@ -189,7 +189,7 @@ def _process_entries(redis, stream_key: str, entries: list, model: "BehavioralTr
                 "trace_id": enriched.get("trace_id"),
                 "received_at": enriched.get("received_at"),
                 "hostname": enriched.get("hostname"),
-                "client_id": first_event.get("client_id"),
+                "client_id": inner_payload.get("client_id") or first_event.get("client_id"),
                 "session_id": session_id,
                 "ip_country": (enriched.get("ip_meta") or {}).get("ip_country"),
                 "ip_type": (enriched.get("ip_meta") or {}).get("ip_type"),

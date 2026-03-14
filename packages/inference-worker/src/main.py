@@ -1,12 +1,11 @@
 """
-Entry point — starts subscriber and heartbeat threads, then serves health endpoint.
+Entry point — starts subscriber thread, then serves health endpoint.
 """
 import threading
 import logging
 import uvicorn
 
 from .subscriber import run_subscriber
-from .health.heartbeat import run_heartbeat
 from .health.http_health import create_app
 
 logging.basicConfig(
@@ -23,11 +22,6 @@ def main():
     subscriber_thread = threading.Thread(target=run_subscriber, daemon=True, name="subscriber")
     subscriber_thread.start()
     logger.info("Subscriber thread started")
-
-    # Start heartbeat writer in background thread
-    heartbeat_thread = threading.Thread(target=run_heartbeat, daemon=True, name="heartbeat")
-    heartbeat_thread.start()
-    logger.info("Heartbeat thread started")
 
     # Serve health endpoint on port 8080 (Fly.io internal only)
     app = create_app()

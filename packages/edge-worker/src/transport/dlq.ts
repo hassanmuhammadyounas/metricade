@@ -1,6 +1,6 @@
 import { Env } from '../index';
 
-// LPUSH to metricade_dlq:{org_id} when no active consumers detected
+// LPUSH to metricade_dlq:{org_id} — last-resort fallback when XADD fails
 export async function publishToDlq(env: Env, orgId: string, message: unknown): Promise<void> {
   const dlqKey = `${env.DLQ_KEY}:${orgId}`;
   const res = await fetch(`${env.UPSTASH_REDIS_URL}/pipeline`, {
@@ -11,12 +11,11 @@ export async function publishToDlq(env: Env, orgId: string, message: unknown): P
     },
     body: JSON.stringify([
       ['LPUSH', dlqKey, JSON.stringify(message)],
-      ['INCR', `metricade_ingest_total:${orgId}`],
     ]),
   });
 
   if (!res.ok) {
-    // DLQ write failed — log and drop. Better to lose the message than to block the request.
-    console.error('[dlq] LPUSH failed', res.status);
+    const text = await res.text();
+    throw new Error(`Redis DLQ LPUSH failed [${res.status}]: ${text}`);
   }
 }

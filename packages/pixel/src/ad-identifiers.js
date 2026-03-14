@@ -18,11 +18,11 @@
 
 export const AD_CLICK_IDS = {
   // ── Google ─────────────────────────────────────────────────────────────
-  gclid:      { platform: 'google',    medium: 'paid_search' },   // Google Ads (Search, Shopping)
-  gbraid:     { platform: 'google',    medium: 'paid_search' },   // Google Ads iOS app (privacy-safe)
-  wbraid:     { platform: 'google',    medium: 'paid_search' },   // Google Ads web-to-app (privacy-safe)
-  gclsrc:     { platform: 'google',    medium: 'paid_search' },   // Google SA360 / DoubleClick Search
-  dclid:      { platform: 'google',    medium: 'display'     },   // Google Display & Video 360
+  gclid:      { platform: 'google',    medium: 'paid_search', paid_only: true },   // Google Ads (Search, Shopping)
+  gbraid:     { platform: 'google',    medium: 'paid_search', paid_only: true },   // Google Ads iOS app (privacy-safe)
+  wbraid:     { platform: 'google',    medium: 'paid_search', paid_only: true },   // Google Ads web-to-app (privacy-safe)
+  gclsrc:     { platform: 'google',    medium: 'paid_search', paid_only: true },   // Google SA360 / DoubleClick Search
+  dclid:      { platform: 'google',    medium: 'display',     paid_only: true },   // Google Display & Video 360
 
   // ── Microsoft ──────────────────────────────────────────────────────────
   msclkid:    { platform: 'microsoft', medium: 'paid_search' },   // Microsoft / Bing Ads

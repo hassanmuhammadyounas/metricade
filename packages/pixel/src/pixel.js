@@ -10,15 +10,15 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
   'use strict';
 
   // ─── Configuration ────────────────────────────────────────────────────────
-  const CONFIG = window.__METRICADE_CONFIG__ || {};
-  const INGEST_URL    = 'https://worker.metricade.com/ingest';
-  const INGEST_SECRET = 'a2714436ee112adcbd0780a68859a76b1522462984ccad0a3e69cdb86b81331b';
-  const ORG_ID = CONFIG.orgId || null;
-  const FLUSH_SIZE = CONFIG.flushSize || 30;
-  const FLUSH_INTERVAL_MS = CONFIG.flushIntervalMs || 10_000;
-  const DEBUG = !!CONFIG.debug;
+  const config = window.__METRICADE_CONFIG__ || {};
+  const ingestUrl    = 'https://worker.metricade.com/ingest';
+  const ingestSecret = 'a2714436ee112adcbd0780a68859a76b1522462984ccad0a3e69cdb86b81331b';
+  const orgId = config.orgId || null;
+  const flushSize = config.flushSize || 30;
+  const flushIntervalMs = config.flushIntervalMs || 10_000;
+  const debug = !!config.debug;
 
-  if (!ORG_ID) {
+  if (!orgId) {
     console.error('[metricade-pixel] No orgId configured. Pixel will not run.');
     return;
   }
@@ -43,34 +43,46 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
   })();
   let pageId = genId();
   let pageLoadIndex = 1;
-  let flushCounter = 0;
+  let flushCounter = (function () { try { return parseInt(sessionStorage.getItem('_mtr_fc') || '0', 10); } catch (_) { return 0; } })();
 
   // ─── Buffer ───────────────────────────────────────────────────────────────
   const buffer = [];
   let lastBeaconTs = 0;
-  const DEDUP_MS = 100;
+  const dedupMs = 100;
 
   function push(event) {
-    buffer.push(Object.assign({ ts: Date.now(), org_id: ORG_ID, client_id: clientId, session_id: sessionId, page_id: pageId, page_load_index: pageLoadIndex }, event));
-    if (buffer.length >= FLUSH_SIZE) flush('buffer_full');
+    buffer.push(Object.assign({ ts: Date.now(), page_id: pageId, page_load_index: pageLoadIndex }, event));
+    if (buffer.length >= flushSize) flush('buffer_full');
   }
 
   function flush(trigger) {
     const now = Date.now();
-    if (trigger === 'pagehide' && now - lastBeaconTs < DEDUP_MS) return;
+    if (trigger === 'pagehide' && now - lastBeaconTs < dedupMs) return;
     if (buffer.length === 0) return;
     lastBeaconTs = now;
     flushCounter++;
+    try { sessionStorage.setItem('_mtr_fc', String(flushCounter)); } catch (_) {}
     const payload = {
-      org_id:   ORG_ID,
-      trace_id: sessionId + '_' + flushCounter + '_' + now,
-      events:   buffer.splice(0),
+      org_id:             orgId,
+      client_id:          clientId,
+      session_id:         sessionId,
+      trace_id:           sessionId + '_' + flushCounter + '_' + now,
+      is_touch:           _isTouch ? 1 : 0,
+      browser_timezone:   _timezone,
+      viewport_w_norm:    Math.round((_vpW / 2560) * 1000) / 1000,
+      viewport_h_norm:    Math.round((_vpH / 1440) * 1000) / 1000,
+      is_paid:            _isPaid ? 1 : 0,
+      session_source:     _sessionSource,
+      session_medium:     _sessionMedium,
+      device_pixel_ratio: window.devicePixelRatio || 1,
+      click_id_type:      _clickIdType,
+      events:             buffer.splice(0),
     };
     send(payload);
   }
 
   function send(payload) {
-    if (DEBUG) {
+    if (debug) {
       console.groupCollapsed('[metricade-pixel] flush — ' + payload.events.length + ' event(s) — trace: ' + payload.trace_id.slice(-12));
       payload.events.forEach((ev) => {
         console.log('%c' + ev.event_type, 'font-weight:bold;color:#6366f1', ev);
@@ -79,20 +91,25 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
       return;
     }
     const body = JSON.stringify(payload);
+    const headers = { 'Content-Type': 'application/json' };
+    if (ingestSecret) headers['x-ingest-secret'] = ingestSecret;
     if (document.visibilityState === 'hidden') {
       // sendBeacon can't set custom headers — append secret as query param
-      const url = INGEST_SECRET ? INGEST_URL + (INGEST_URL.includes('?') ? '&' : '?') + 's=' + INGEST_SECRET : INGEST_URL;
-      navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+      const url = ingestSecret ? ingestUrl + (ingestUrl.includes('?') ? '&' : '?') + 's=' + ingestSecret : ingestUrl;
+      const sent = navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+      if (!sent) {
+        // Browser rejected the beacon (queue full) — fall back to keepalive fetch
+        fetch(ingestUrl, { method: 'POST', headers, body, keepalive: true }).catch(() => {});
+      }
     } else {
-      const headers = { 'Content-Type': 'application/json' };
-      if (INGEST_SECRET) headers['x-ingest-secret'] = INGEST_SECRET;
-      fetch(INGEST_URL, { method: 'POST', headers, body, keepalive: true })
-        .catch(() => { push({ event_type: 'flush_error', delta_ms: 0, events_lost: payload.events.length }); });
+      fetch(ingestUrl, { method: 'POST', headers, body, keepalive: true })
+        .then((res) => { if (!res.ok) payload.events.forEach((e) => buffer.push(e)); })
+        .catch(() => { payload.events.forEach((e) => buffer.push(e)); });
     }
   }
 
   // ─── Interval flush ───────────────────────────────────────────────────────
-  setInterval(() => { if (buffer.length > 0) flush('interval'); }, FLUSH_INTERVAL_MS);
+  setInterval(() => { if (buffer.length > 0) flush('interval'); }, flushIntervalMs);
 
   // ─── Session attribution (read once at load) ───────────────────────────────
   // Priority: 1) click ID  2) UTM params  3) document.referrer  4) direct
@@ -117,8 +134,11 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
   let _sessionSource, _sessionMedium, _isPaid;
   if (_clickIdMatch) {
     _sessionSource = _clickIdMatch.platform;
-    _sessionMedium = _clickIdMatch.medium;
-    _isPaid        = true;
+    // paid_only click IDs (gclid, gbraid, wbraid etc.) are exclusively paid —
+    // never let UTM override them. Others (fbclid) appear on organic links too,
+    // so trust utm_medium when explicitly provided.
+    _sessionMedium = _clickIdMatch.paid_only ? _clickIdMatch.medium : (_utmMedium || _clickIdMatch.medium);
+    _isPaid        = _clickIdMatch.paid_only ? true : !!(_sessionMedium && _sessionMedium.startsWith('paid'));
   } else if (_utmSource || _utmMedium) {
     _sessionSource = _utmSource || null;
     _sessionMedium = _utmMedium || null;
@@ -151,9 +171,12 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   function hashPath(path) {
-    let h = 0;
-    for (let i = 0; i < path.length; i++) h = (Math.imul(31, h) + path.charCodeAt(i)) | 0;
-    return (h >>> 0).toString(16);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < path.length; i++) {
+      h ^= path.charCodeAt(i);
+      h = (Math.imul(h, 0x01000193)) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
   }
 
   function patchX(x) { return Math.round((x / _vpW) * 1000) / 1000; }
@@ -171,27 +194,19 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
 
   // ─── init ─────────────────────────────────────────────────────────────────
   push({
-    event_type:         'init',
-    delta_ms:           0,
-    page_path_hash:     hashPath(location.pathname),
-    is_touch:           _isTouch ? 1 : 0,
-    browser_timezone:   _timezone,
-    viewport_w_norm:    Math.round((_vpW / 2560) * 1000) / 1000,
-    viewport_h_norm:    Math.round((_vpH / 1440) * 1000) / 1000,
-    is_paid:            _isPaid ? 1 : 0,
-    session_source:     _sessionSource,
-    session_medium:     _sessionMedium,
-    device_pixel_ratio: window.devicePixelRatio || 1,
-    click_id_type:      _clickIdType,
+    event_type:     'page_view',
+    delta_ms:       0,
+    page_path_hash: hashPath(location.pathname),
+    page_url:       location.href,
   });
 
-  // ─── page_view ────────────────────────────────────────────────────────────
-  function onPageView() {
+  // ─── route_change (SPA navigation only) ──────────────────────────────────
+  function onRouteChange() {
     pageId = genId();
-    push({ event_type: 'page_view', delta_ms: 0, page_path_hash: hashPath(location.pathname) });
+    push({ event_type: 'route_change', delta_ms: 0, page_path_hash: hashPath(location.pathname), page_url: location.href });
   }
-  window.addEventListener('popstate',   () => { pageLoadIndex++; onPageView(); });
-  window.addEventListener('hashchange', () => { pageLoadIndex++; onPageView(); });
+  window.addEventListener('popstate',   () => { pageLoadIndex++; onRouteChange(); });
+  window.addEventListener('hashchange', () => { pageLoadIndex++; onRouteChange(); });
 
   // ─── scroll ───────────────────────────────────────────────────────────────
   // Attached to BOTH window and document per spec (section 12):
@@ -296,5 +311,38 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
     }
   });
   window.addEventListener('pagehide', () => flush('pagehide'));
+
+  // ─── engagement_tick + idle ───────────────────────────────────────────────
+  // engagement_tick fires every 5s while tab is visible and user was active.
+  // idle fires once when user has been inactive for >5s (resets on next activity).
+  const tickIntervalMs = 5000;
+  const idleThresholdMs = 5000;
+  let lastActivityTs = Date.now();
+  let idleFired = false;
+
+  function onActivity() {
+    lastActivityTs = Date.now();
+    idleFired = false;
+  }
+
+  window.addEventListener('scroll',     onActivity, { passive: true });
+  window.addEventListener('click',      onActivity, { passive: true });
+  window.addEventListener('touchstart', onActivity, { passive: true });
+  window.addEventListener('keydown',    onActivity, { passive: true });
+
+  setInterval(() => {
+    if (document.visibilityState === 'hidden') return;
+    const now = Date.now();
+    const inactiveDuration = now - lastActivityTs;
+    if (inactiveDuration >= idleThresholdMs) {
+      if (!idleFired) {
+        idleFired = true;
+        push({ event_type: 'idle', delta_ms: 0, idle_duration_ms: Math.round(inactiveDuration) });
+      }
+    } else {
+      push({ event_type: 'engagement_tick', delta_ms: 0, active_ms: Math.round(now - lastActivityTs) });
+    }
+  }, tickIntervalMs);
+
 
 })();

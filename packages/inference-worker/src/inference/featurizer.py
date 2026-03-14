@@ -18,7 +18,7 @@ def featurize(payload: dict[str, Any], enriched: dict[str, Any] | None = None) -
     enriched is the full wrapper written by the edge worker (ip_meta, ua_meta, time_features, etc.).
     """
     events = payload.get("events", [])
-    session = _extract_session(events, enriched or {})
+    session = _extract_session(payload, events, enriched or {})
     rows = []
     for event in events[:MAX_SEQ_LEN]:
         rows.append(_event_to_features(event, session))
@@ -50,19 +50,28 @@ def _parse_hash(val) -> float:
         return 0.0
 
 
-def _extract_session(events: list, enriched: dict) -> dict:
-    """Pre-scan event list for init fields and merge with enriched wrapper."""
+def _extract_session(payload: dict, events: list, enriched: dict) -> dict:
+    """Pre-scan payload and event list for session fields and merge with enriched wrapper.
+    Reads session-level fields from payload first (new format), falls back to init event
+    for backwards compatibility with old stream entries.
+    """
     init = next((e for e in events if e.get("event_type") == "init"), {})
     ip = enriched.get("ip_meta") or {}
     ua = enriched.get("ua_meta") or {}
     tf = enriched.get("time_features") or {}
+
+    def _pget(key, default=None):
+        """Get from payload first, fall back to init event."""
+        v = payload.get(key)
+        return v if v is not None else init.get(key, default)
+
     return {
         "page_path_hash":     _parse_hash(init.get("page_path_hash")),
-        "is_paid":            float(init.get("is_paid", 0)),
-        "click_id_type":      _djb2(init.get("click_id_type", "none")),
-        "device_pixel_ratio": min(float(init.get("device_pixel_ratio", 1.0)), 4.0) / 4.0,
-        "viewport_w_norm":    float(init.get("viewport_w_norm", 0.0)),
-        "viewport_h_norm":    float(init.get("viewport_h_norm", 0.0)),
+        "is_paid":            float(_pget("is_paid", 0)),
+        "click_id_type":      _djb2(_pget("click_id_type", "none")),
+        "device_pixel_ratio": min(float(_pget("device_pixel_ratio", 1.0)), 4.0) / 4.0,
+        "viewport_w_norm":    float(_pget("viewport_w_norm", 0.0)),
+        "viewport_h_norm":    float(_pget("viewport_h_norm", 0.0)),
         "is_webview":         float(ua.get("is_webview", False)),
         "is_touch":           1.0 if ua.get("device_type") in ("mobile", "tablet") else 0.0,
         "ip_type":            {"residential": 0.0, "datacenter": 1.0}.get(ip.get("ip_type", ""), 0.5),
