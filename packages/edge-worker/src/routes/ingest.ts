@@ -66,15 +66,16 @@ export async function ingest(c: Context<{ Bindings: Env; Variables: Variables }>
     await publishToStream(c.env, orgId, enriched);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    const inDlq = errMsg.includes('data saved to DLQ');
-    console.error('[ingest] Redis publish failed:', errMsg);
+    if (errMsg.includes('data saved to DLQ')) {
+      // XADD failed but data is safe in DLQ — drain cron will recover it. No alert needed.
+      return c.json({ ok: true, trace_id: traceId });
+    }
+    // Both XADD and DLQ failed after all retries — data is lost, alert immediately.
+    console.error('[ingest] Redis publish failed completely:', errMsg);
     if (c.env.SLACK_WEBHOOK_URL) {
-      const msg = `*Metricade ingest error*\norg: ${orgId}\ntrace: ${traceId}\nstatus: ${inDlq ? 'XADD failed, data saved to DLQ' : 'XADD + DLQ both failed — DATA LOST'}\nerror: ${errMsg}`;
+      const msg = `*Metricade ingest error — DATA LOST*\norg: ${orgId}\ntrace: ${traceId}\nerror: ${errMsg}`;
       c.executionCtx.waitUntil(notifySlack(c.env.SLACK_WEBHOOK_URL, msg));
     }
-    // If data reached DLQ it is not lost — return 200 so pixel does not retry (avoid duplicates).
-    // If both failed, return 500 so pixel retries.
-    if (inDlq) return c.json({ ok: true, trace_id: traceId });
     return c.json({ error: 'internal_error' }, 500);
   }
 

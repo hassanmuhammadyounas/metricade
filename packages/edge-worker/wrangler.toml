@@ -7,6 +7,9 @@ routes = [
   { pattern = "worker.metricade.com", custom_domain = true }
 ]
 
+[triggers]
+crons = ["* * * * *"]
+
 [vars]
 ENVIRONMENT         = "production"
 STREAM_NAME         = "metricade_stream"

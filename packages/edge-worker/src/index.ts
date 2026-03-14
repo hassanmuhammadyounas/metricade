@@ -5,6 +5,7 @@ import { trace } from './middleware/trace';
 import { ingest } from './routes/ingest';
 import { health } from './routes/health';
 import { dlqStatus } from './routes/dlq-status';
+import { drainDlqs } from './jobs/drain-dlq';
 
 export type Env = {
   UPSTASH_REDIS_URL: string;
@@ -35,4 +36,9 @@ app.get('/health', health);
 app.use('/dlq/*', auth());
 app.get('/dlq/status', dlqStatus);
 
-export default app;
+export default {
+  fetch: app.fetch.bind(app),
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(drainDlqs(env));
+  },
+};

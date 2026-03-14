@@ -103,8 +103,8 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
       }
     } else {
       fetch(ingestUrl, { method: 'POST', headers, body, keepalive: true })
-        .then((res) => { if (!res.ok) payload.events.forEach((e) => buffer.push(e)); })
-        .catch(() => { payload.events.forEach((e) => buffer.push(e)); });
+        .then((res) => { if (!res.ok) payload.events.forEach((e) => buffer.push({ ...e, is_retry: true })); })
+        .catch(() => { payload.events.forEach((e) => buffer.push({ ...e, is_retry: true })); });
     }
   }
 
