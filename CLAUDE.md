@@ -6,10 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 Browser (pixel.js)
-  └─> Cloudflare Edge Worker (Hono)       POST /ingest  →  worker.metricade.com
-          └─> Upstash Redis Streams        metricade_stream:{org_id}
-                  └─> Fly.io Vector Worker  accumulate → featurize → raw feature vector
-                          └─> Upstash Vector   cosine similarity, keyed by session_id
+  └─> Cloudflare Edge Worker (Hono)        POST /ingest → worker.metricade.com
+          └─> Upstash Redis Streams          metricade_stream:{org_id}
+                  └─> Feature Worker (Fly.io) accumulate → featurize → token merge (N=8) → store npz
+                          └─> Redis              metricade_features:{org_id}:{session_id} (24h TTL)
+                          └─> Redis Stream       metricade_features_stream:{org_id} (pointer)
+                                  └─> Model Worker (Fly.io)
+                                          └─> Per-org BehavioralTransformer → 192-dim vector
+                                                  └─> Upstash Vector
 ```
 
 All deployments are **manual**. There is no CI/CD.
@@ -22,7 +26,8 @@ All deployments are **manual**. There is no CI/CD.
 |--------------------|-----------------------------------------------------|-----------------------|
 | Pixel CDN          | https://pixel.metricade.com/pixel.min.js            | Cloudflare Pages      |
 | Edge Worker        | https://worker.metricade.com                        | Cloudflare Workers    |
-| Vector Worker      | https://behavioral-inference.fly.dev                | Fly.io (`iad` region) |
+| Feature Worker     | https://metricade-feature-worker.fly.dev            | Fly.io (`iad` region) |
+| Model Worker       | https://metricade-model-worker.fly.dev              | Fly.io (`iad` region) |
 | Redis              | https://singular-fawn-58838.upstash.io              | Upstash               |
 | Vector DB          | https://bright-tiger-54944-us1-vector.upstash.io    | Upstash Vector        |
 
@@ -183,11 +188,16 @@ for v in r.json().get('result',{}).get('vectors',[]):
 
 ## Feature Vector — Complete Reference
 
-`packages/vector-worker/src/inference/featurizer.py` produces a `FeatureOutput` dataclass:
-- `cont`: `[64, N_CONT]` float32 tensor — continuous features per event row (N_CONT = 40)
+`packages/feature-worker/src/inference/featurizer.py` produces a `FeatureOutput` dataclass:
+- `cont`: `[min(len(events), MAX_RAW_EVENTS), N_CONT]` float32 tensor — continuous features per event row (N_CONT = 40, variable length up to 2048)
 - `cat`: `[8]` int64 tensor — session-level categorical indices (one per categorical field, N_CAT = 8)
 
-**64 rows** = up to 64 events per session (zero-padded). Oldest event first.
+After featurization, `packages/feature-worker/src/inference/token_merger.py` compresses the variable-length cont tensor:
+- TOKEN_MERGE_FACTOR = 8 — merges 8 adjacent raw event rows into one token via mean pooling
+- MAX_SEQ_LEN = 256 — final sequence length fed to BehavioralTransformer (always exactly 256, zero-padded if fewer tokens)
+- Covers up to 2048 raw events per session (MAX_RAW_EVENTS = 2048; 2048 / 8 = 256 tokens)
+
+**256 rows** = up to 256 merged tokens per session (zero-padded). Oldest events first.
 
 `page_path_hash` from pixel.js is a hex string — parsed into a vocabulary index (not a float).
 Session-level fields use `_pget()`: reads from payload root first, falls back to `page_view` event for backwards compatibility.
@@ -266,11 +276,13 @@ Total embedding output = 10+8+8+8+8+8+8+16 = **74 dims** (concatenated, broadcas
 
 | Key pattern | Type | Purpose |
 |-------------|------|---------|
-| `metricade_stream:{org_id}` | Stream | Ingest event stream, consumed by vector worker |
+| `metricade_stream:{org_id}` | Stream | Ingest event stream, consumed by feature worker |
 | `metricade_dlq:{org_id}` | List | Dead-letter queue — populated by edge worker only on XADD failure; drained back to stream every minute by cron |
 | `metricade_sess:{org_id}:{session_id}` | String (JSON) | Accumulated event list for session, TTL 4h |
 | `metricade_new_sess:{org_id}:{session_id}` | String | Session dedup key for prior_session_count — SETNX on first flush, TTL 4h |
 | `metricade_client_sessions:{org_id}:{client_id}` | String (int) | Running count of sessions seen for this client_id — incremented on each new session, no TTL |
+| `metricade_features:{org_id}:{session_id}` | String (npz bytes) | Encoded feature tensors (cont [256×40] float32 + cat [8] int64), TTL 24h |
+| `metricade_features_stream:{org_id}` | Stream | Lightweight pointers consumed by model worker |
 
 ---
 

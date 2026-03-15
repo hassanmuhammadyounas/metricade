@@ -1,0 +1,28 @@
+# fly.toml app configuration file for metricade-model-worker
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'metricade-model-worker'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  CONSUMER_GROUP = 'model_group'
+  CONSUMER_NAME = 'model_worker_1'
+  ENVIRONMENT = 'production'
+  FEATURES_STREAM_NAME = 'metricade_features_stream'
+  FEATURE_STORE_KEY_PREFIX = 'metricade_features'
+  MODELS_DIR = '/models'
+  SPOT_CHECK_RATE = '0.01'
+  VECTOR_DIMS = '192'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
