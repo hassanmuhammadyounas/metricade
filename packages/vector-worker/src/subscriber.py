@@ -153,7 +153,7 @@ def _process_entries(redis, stream_key: str, entries: list, model: "BehavioralTr
 
             t0 = time.perf_counter()
             features = featurize(merged_payload, enriched)
-            vector = model.encode(features)
+            vector = model.encode(features.cont, features.cat)
             _last_inference_ms = (time.perf_counter() - t0) * 1000
             meta = {
                 "org_id": org_id,

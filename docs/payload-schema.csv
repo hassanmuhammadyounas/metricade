@@ -18,16 +18,16 @@ enrichment,hostname,string,yes,all,Hostname extracted from Origin or Referer hea
 enrichment,prior_session_count,int,yes,all,Number of prior sessions for this client_id looked up from Redis (key: metricade_client_sessions:{org_id}:{client_id}) — 0 on first visit injected by edge worker before publishing to stream,3,log1p_norm,yes,no
 enrichment,timezone_mismatch,boolean,yes,all,True if ip_meta.ip_timezone differs from browser_timezone,false,binary,yes,no
 enrichment,ip_meta.ip,string,yes,all,Connecting IP address,2400:adc5:140:3100:1844:2979:5478:655d,not_used,no,no
-enrichment,ip_meta.ip_country,string,yes,all,ISO 2-letter country code from Cloudflare cf object,PK,learned_embedding_dim32,yes,yes
+enrichment,ip_meta.ip_country,string,yes,all,ISO 2-letter country code from Cloudflare cf object,PK,learned_embedding_dim8,yes,yes
 enrichment,ip_meta.ip_asn,string,yes,all,Autonomous system number,9541,not_used,no,no
 enrichment,ip_meta.ip_org,string,yes,all,ASN organisation name,Cyber Internet Services Pakistan,not_used,no,no
-enrichment,ip_meta.ip_type,string,yes,all,Connection type classified by ASN — residential / datacenter / unknown,residential,learned_embedding_dim4,yes,yes
+enrichment,ip_meta.ip_type,string,yes,all,Connection type classified by ASN — residential / datacenter / unknown,residential,ordinal_3class,yes,yes
 enrichment,ip_meta.ip_timezone,string,yes,all,Timezone derived from IP geolocation,Asia/Karachi,not_used,no,no
 enrichment,ua_meta.browser_family,string,yes,all,Parsed browser name from User-Agent,instagram,learned_embedding_dim10,yes,no
 enrichment,ua_meta.browser_version,string,yes,all,Parsed browser version,420.0.0.55.74,not_used,no,no
 enrichment,ua_meta.os_family,string,yes,all,Parsed operating system name,android,learned_embedding_dim8,yes,no
 enrichment,ua_meta.os_version,string,yes,all,Parsed operating system version,16,not_used,no,no
-enrichment,ua_meta.device_type,string,yes,all,Classified device type — desktop / mobile / tablet / bot / unknown,mobile,learned_embedding_dim4,yes,yes
+enrichment,ua_meta.device_type,string,yes,all,Classified device type — desktop / mobile / tablet / bot / unknown,mobile,ordinal_5class,yes,yes
 enrichment,ua_meta.device_vendor,string,yes,all,Parsed device manufacturer — apple / samsung / google / xiaomi / huawei etc.,apple,learned_embedding_dim8,yes,no
 enrichment,ua_meta.is_webview,boolean,yes,all,True if request came from an in-app browser — Instagram / TikTok / Facebook etc.,true,binary,yes,yes
 enrichment,time_features.hour_sin,float,yes,all,Sine encoding of hour of day — sin(2π × hour / 24),-0.601,passthrough,yes,no
@@ -38,13 +38,13 @@ enrichment,time_features.local_hour,int,yes,all,Local hour at time of ingest (0�
 enrichment,time_features.is_weekend,int,yes,all,1 if Saturday or Sunday — 0 otherwise,1,binary,yes,no
 event_base,ts,int,yes,all,Unix timestamp in milliseconds when the event was recorded in the browser,1773521956550,not_used,no,no
 event_base,page_id,string,yes,all,UUID identifying the current page navigation — refreshed on each SPA route change,45c8319b-7d93-467d-a4b7-e6415183971d,dropped,no,no
-event_base,page_load_index,int,yes,all,Sequential page navigation counter within the session — starts at 1,1,passthrough,yes,no
+event_base,page_load_index,int,yes,all,Sequential page navigation counter within the session — starts at 1,1,cap20_div20,yes,no
 event_base,event_type,string,yes,all,Type of event — page_view / route_change / scroll / touch_end / click / tab_hidden / tab_visible / engagement_tick / idle,page_view,one_hot_9_classes,yes,no
 event_base,delta_ms,int,yes,all,Milliseconds since the previous event was pushed to the buffer,5490,divide_by_10000,yes,no
 event_base,is_retry,boolean,no,all,Present and true only when this event was re-queued after a failed flush — used to identify retried payloads,true,not_used,no,no
-event_page_view,page_path_hash,string,yes,page_view,FNV-1a 32-bit hash of location.pathname as 8-char hex string,2a0c975e,int_hex_norm,yes,no
+event_page_view,page_path_hash,string,yes,page_view,FNV-1a 32-bit hash of location.pathname as 8-char hex string,2a0c975e,learned_embedding_dim16,yes,no
 event_page_view,page_url,string,yes,page_view,Full URL including query string at time of page load,https://sukoonfit.com/?utm_source=ig&fbclid=xxx,not_used,no,no
-event_route_change,page_path_hash,string,yes,route_change,FNV-1a 32-bit hash of new pathname after SPA navigation,13177c2e,int_hex_norm,yes,no
+event_route_change,page_path_hash,string,yes,route_change,FNV-1a 32-bit hash of new pathname after SPA navigation,13177c2e,learned_embedding_dim16,yes,no
 event_route_change,page_url,string,yes,route_change,Full URL after SPA navigation,https://sukoonfit.com/products/xyz,not_used,no,no
 event_scroll,scroll_velocity_px_s,float,yes,scroll,Scroll speed in pixels per second — positive is down negative is up,3670.7,log1p_signed_div10,yes,no
 event_scroll,scroll_acceleration,float,yes,scroll,Rate of change of velocity in px/s² — positive speeding up negative slowing down,173916.6,log1p_signed_div15,yes,no

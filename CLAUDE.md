@@ -174,7 +174,7 @@ for v in r.json().get('result',{}).get('vectors',[]):
   6. `XACK`
 - Every 150 loops (~5 min): re-scan for new org streams, run `XAUTOCLAIM` to reclaim idle PEL messages (idle >60s), clean up expired in-memory session cache.
 - **DLQ**: owned entirely by the edge worker. Vector worker does NOT drain DLQ.
-- **Model** (`src/inference/transformer.py`): `BehavioralTransformer` — nn.Embedding tables (browser, os, country, ip_type, click_id, device_type, session_source, session_medium, device_vendor) → concat embeddings (90 dims) with continuous features → Linear(N_CONT+90→128) → CLS token + TransformerEncoder(d_model=128, nhead=4, num_layers=2) → CLS output → Linear(128→192) → L2 normalize. Falls back to random init if model file not found at `MODEL_PATH`. All embedding tables start random and become meaningful after training on real sessions.
+- **Model** (`src/inference/transformer.py`): `BehavioralTransformer` — nn.Embedding tables (browser, os, country, click_id, session_source, session_medium, device_vendor, page_path_hash) → concat embeddings (74 dims) with continuous features → Linear(N_CONT+74→128) → CLS token + TransformerEncoder(d_model=128, nhead=4, num_layers=2) → CLS output → Linear(128→192) → L2 normalize. Falls back to random init if model file not found at `MODEL_PATH`. All embedding tables start random and become meaningful after training on real sessions.
 - **Spot-check**: 1% of upserts are read back from Upstash Vector to verify persistence (`SPOT_CHECK_RATE=0.01`).
 - **`src/constants.py` default values are wrong** (`behavioral_stream`, `behavioral_dlq`) — always overridden by `fly.toml` env vars.
 - **Multi-org model strategy**: Two-tier — per-org model file (`models/{org_id}.pt`) for orgs with sufficient data; falls back to segment model (`models/segment_low_aov.pt` / `segment_mid_aov.pt` / `segment_high_aov.pt`) for new/small orgs. Segment assigned at org onboarding via `metricade_org:{org_id}` Redis key. Training pipeline is a separate offline script — not yet implemented.
@@ -184,15 +184,15 @@ for v in r.json().get('result',{}).get('vectors',[]):
 ## Feature Vector — Complete Reference
 
 `packages/vector-worker/src/inference/featurizer.py` produces a `FeatureOutput` dataclass:
-- `cont`: `[64, N_CONT]` float32 tensor — continuous features per event row
-- `cat`: `[5]` int64 tensor — session-level categorical indices (one per categorical field)
+- `cont`: `[64, N_CONT]` float32 tensor — continuous features per event row (N_CONT = 40)
+- `cat`: `[8]` int64 tensor — session-level categorical indices (one per categorical field, N_CAT = 8)
 
 **64 rows** = up to 64 events per session (zero-padded). Oldest event first.
 
-`page_path_hash` from pixel.js is a hex string — parsed with `int(val, 16) / 0xFFFFFFFF`.
+`page_path_hash` from pixel.js is a hex string — parsed into a vocabulary index (not a float).
 Session-level fields use `_pget()`: reads from payload root first, falls back to `page_view` event for backwards compatibility.
 
-### Continuous features (`cont` tensor — per event row)
+### Continuous features (`cont` tensor — per event row, N_CONT = 40)
 
 | Index | Feature | Source | Encoding |
 |-------|---------|--------|----------|
@@ -218,27 +218,28 @@ Session-level fields use `_pget()`: reads from payload root first, falls back to
 | 19 | patch_y | event | passthrough (0–1) |
 | 20 | scroll_direction | event | -1 / 0 / 1 |
 | 21 | scroll_pause_duration_ms | event | / 10000 |
-| 22 | page_load_index | event | raw int |
+| 22 | page_load_index | event | min(val, 20) / 20.0 |
 | 23 | long_press_duration_ms | event | / 5000 |
-| 24 | page_path_hash | event (hex string) | int(val,16) / 0xFFFFFFFF |
-| 25 | tap_radius_y | event | / 50 |
-| 26 | is_webview | enriched.ua_meta.is_webview | bool |
-| 27 | is_touch | ua_meta.device_type in (mobile, tablet) | bool |
-| 28 | is_paid | payload root (fallback: page_view event) | bool |
-| 29 | device_pixel_ratio | payload root (fallback: page_view event) | min(val, 4.0) / 4.0 |
-| 30 | viewport_w_norm | payload root | already 0–1 (viewport/2560) |
-| 31 | viewport_h_norm | payload root | already 0–1 (viewport/1440) |
-| 32 | hour_sin | enriched.time_features | sin(2π × hour/24) |
-| 33 | hour_cos | enriched.time_features | cos(2π × hour/24) |
-| 34 | dow_sin | enriched.time_features | sin(2π × dow/7) |
-| 35 | dow_cos | enriched.time_features | cos(2π × dow/7) |
-| 36 | is_weekend | enriched.time_features | bool |
-| 37 | timezone_mismatch | enriched.timezone_mismatch | bool (ip_timezone ≠ browser_timezone) |
-| 38 | prior_session_count | enriched.prior_session_count | log1p(val) / log1p(20), capped at 1.0 |
+| 24 | tap_radius_y | event | / 50 |
+| 25 | is_webview | enriched.ua_meta.is_webview | bool |
+| 26 | is_touch | ua_meta.device_type in (mobile, tablet) | bool |
+| 27 | is_paid | payload root (fallback: page_view event) | bool |
+| 28 | device_pixel_ratio | payload root (fallback: page_view event) | min(val, 4.0) / 4.0 |
+| 29 | viewport_w_norm | payload root | already 0–1 (viewport/2560) |
+| 30 | viewport_h_norm | payload root | already 0–1 (viewport/1440) |
+| 31 | hour_sin | enriched.time_features | sin(2π × hour/24) |
+| 32 | hour_cos | enriched.time_features | cos(2π × hour/24) |
+| 33 | dow_sin | enriched.time_features | sin(2π × dow/7) |
+| 34 | dow_cos | enriched.time_features | cos(2π × dow/7) |
+| 35 | is_weekend | enriched.time_features | bool |
+| 36 | timezone_mismatch | enriched.timezone_mismatch | bool (ip_timezone ≠ browser_timezone) |
+| 37 | prior_session_count | enriched.prior_session_count | log1p(val) / log1p(20), capped at 1.0 |
+| 38 | ip_type | enriched.ip_meta.ip_type | ordinal: residential=0.0, unknown=0.5, datacenter=1.0 |
+| 39 | device_type | enriched.ua_meta.device_type | ordinal: mobile=1.0, tablet=0.75, desktop=0.5, unknown=0.25, bot=0.0 |
 
-**Dropped**: `page_id` (was index 23 — pure noise, unique UUID per page, model can never learn from it).
+**Dropped**: `page_id` (pure noise — unique UUID per page, model can never learn from it). `page_path_hash` moved to categorical (learned embedding — same path = same index = model learns page-type similarity).
 
-### Categorical features (`cat` tensor — session-level, integer indices)
+### Categorical features (`cat` tensor — session-level, integer indices, N_CAT = 8)
 
 These are looked up in `nn.Embedding` tables inside `BehavioralTransformer`. Index 0 = unknown/fallback for any value not in vocabulary.
 
@@ -246,15 +247,16 @@ These are looked up in `nn.Embedding` tables inside `BehavioralTransformer`. Ind
 |-----------|---------|--------|-----------|-----------|
 | 0 | browser_family | enriched.ua_meta.browser_family | ~20 | 10 |
 | 1 | os_family | enriched.ua_meta.os_family | ~15 | 8 |
-| 2 | ip_country | enriched.ip_meta.ip_country (ISO code) | ~250 | 32 |
-| 3 | ip_type | enriched.ip_meta.ip_type | 3 | 4 |
-| 4 | click_id_type | payload.click_id_type | ~10 | 8 |
-| 5 | device_type | enriched.ua_meta.device_type | 5 | 4 |
-| 6 | session_source | payload.session_source | ~15 | 8 |
-| 7 | session_medium | payload.session_medium | ~10 | 8 |
-| 8 | device_vendor | enriched.ua_meta.device_vendor | ~15 | 8 |
+| 2 | ip_country | enriched.ip_meta.ip_country (ISO code) | ~250 | 8 |
+| 3 | click_id_type | payload.click_id_type | ~10 | 8 |
+| 4 | session_source | payload.session_source | ~15 | 8 |
+| 5 | session_medium | payload.session_medium | ~10 | 8 |
+| 6 | device_vendor | enriched.ua_meta.device_vendor | ~15 | 8 |
+| 7 | page_path_hash | event.page_path_hash (hex string → vocab index) | unbounded | 16 |
 
-Total embedding output = 10+8+32+4+8+4+8+8+8 = **90 dims** (concatenated, broadcast to all event rows, then concatenated with `cont` before `input_proj`).
+Total embedding output = 10+8+8+8+8+8+8+16 = **74 dims** (concatenated, broadcast to all event rows, then concatenated with `cont` before `input_proj`).
+
+**Note on ip_type and device_type**: both have small fixed cardinalities (3 and 5 values respectively) that are already rank-ordered — ordinal encoding works immediately without needing training data to converge. Learned embeddings would waste capacity.
 
 **When adding a new feature**: update only `featurizer.py` for continuous features, or add a new `nn.Embedding` entry in `transformer.py` for categorical features.
 
