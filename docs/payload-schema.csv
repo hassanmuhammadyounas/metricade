@@ -8,8 +8,8 @@ session_payload,browser_timezone,string,yes,all,IANA timezone from browser Intl 
 session_payload,viewport_w_norm,float,yes,all,Viewport width normalised to 2560px — value between 0 and 1,0.156,passthrough,yes,no
 session_payload,viewport_h_norm,float,yes,all,Viewport height normalised to 1440px — value between 0 and 1,0.563,passthrough,yes,no
 session_payload,is_paid,int,yes,all,Whether session originated from a paid channel — 1 or 0,1,binary,yes,yes
-session_payload,session_source,string,yes,all,Traffic source platform — meta / google / direct / klaviyo etc.,meta,not_used,no,yes
-session_payload,session_medium,string,yes,all,Normalised traffic channel — paid_social / paid_search / organic_social / email / direct etc.,paid_social,djb2_hash_norm,yes,yes
+session_payload,session_source,string,yes,all,Traffic source platform — meta / google / direct / klaviyo etc.,meta,learned_embedding_dim8,yes,yes
+session_payload,session_medium,string,yes,all,Normalised traffic channel — paid_social / paid_search / organic_social / email / direct etc.,paid_social,learned_embedding_dim8,yes,yes
 session_payload,device_pixel_ratio,float,yes,all,Window devicePixelRatio — typically 1 / 1.5 / 2 / 3,2.4375,divide_by_4,yes,no
 session_payload,click_id_type,string,yes,all,Ad click ID parameter found in URL — fbclid / gclid / ttclid / none etc.,fbclid,learned_embedding_dim8,yes,yes
 session_payload,time_to_first_interaction_ms,int|null,yes,all,Milliseconds from page load to first user interaction (scroll / click / touch / keydown) — null if user never interacted (bounce),8229,divide_by_30000,yes,no
@@ -21,14 +21,14 @@ enrichment,ip_meta.ip,string,yes,all,Connecting IP address,2400:adc5:140:3100:18
 enrichment,ip_meta.ip_country,string,yes,all,ISO 2-letter country code from Cloudflare cf object,PK,learned_embedding_dim32,yes,yes
 enrichment,ip_meta.ip_asn,string,yes,all,Autonomous system number,9541,not_used,no,no
 enrichment,ip_meta.ip_org,string,yes,all,ASN organisation name,Cyber Internet Services Pakistan,not_used,no,no
-enrichment,ip_meta.ip_type,string,yes,all,Connection type classified by ASN — residential / datacenter / unknown,residential,residential=0.0 datacenter=1.0 unknown=0.5,yes,yes
+enrichment,ip_meta.ip_type,string,yes,all,Connection type classified by ASN — residential / datacenter / unknown,residential,learned_embedding_dim4,yes,yes
 enrichment,ip_meta.ip_timezone,string,yes,all,Timezone derived from IP geolocation,Asia/Karachi,not_used,no,no
 enrichment,ua_meta.browser_family,string,yes,all,Parsed browser name from User-Agent,instagram,learned_embedding_dim10,yes,no
 enrichment,ua_meta.browser_version,string,yes,all,Parsed browser version,420.0.0.55.74,not_used,no,no
 enrichment,ua_meta.os_family,string,yes,all,Parsed operating system name,android,learned_embedding_dim8,yes,no
 enrichment,ua_meta.os_version,string,yes,all,Parsed operating system version,16,not_used,no,no
 enrichment,ua_meta.device_type,string,yes,all,Classified device type — desktop / mobile / tablet / bot / unknown,mobile,learned_embedding_dim4,yes,yes
-enrichment,ua_meta.device_vendor,string,yes,all,Parsed device manufacturer,google,not_used,no,no
+enrichment,ua_meta.device_vendor,string,yes,all,Parsed device manufacturer — apple / samsung / google / xiaomi / huawei etc.,apple,learned_embedding_dim8,yes,no
 enrichment,ua_meta.is_webview,boolean,yes,all,True if request came from an in-app browser — Instagram / TikTok / Facebook etc.,true,binary,yes,yes
 enrichment,time_features.hour_sin,float,yes,all,Sine encoding of hour of day — sin(2π × hour / 24),-0.601,passthrough,yes,no
 enrichment,time_features.hour_cos,float,yes,all,Cosine encoding of hour of day — cos(2π × hour / 24),0.798,passthrough,yes,no
