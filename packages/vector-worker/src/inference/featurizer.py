@@ -7,8 +7,8 @@ from typing import Any
 
 # Maximum sequence length (pad or truncate to this)
 MAX_SEQ_LEN = 64
-# 51 features per event — see shared/constants/feature-list.ts for the complete ordered list
-NUM_FEATURES = 51
+# 53 features per event (9 one-hot event types + 44 behavioural features)
+NUM_FEATURES = 53
 
 
 def featurize(payload: dict[str, Any], enriched: dict[str, Any] | None = None) -> torch.Tensor:
@@ -158,7 +158,7 @@ def _event_to_features(event: dict, session: dict) -> list[float]:
 
 def _one_hot_event_type(event_type: str) -> list[float]:
     # Must match pixel.js event_type values (lowercase)
-    types = ["init", "page_view", "scroll", "touch_end", "click", "tab_hidden", "tab_visible"]
+    types = ["page_view", "route_change", "scroll", "touch_end", "click", "tab_hidden", "tab_visible", "engagement_tick", "idle"]
     return [1.0 if event_type == t else 0.0 for t in types]
 
 

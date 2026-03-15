@@ -12,7 +12,7 @@ from .storage.vector_client import upsert_vector
 from .inference.transformer import BehavioralTransformer
 from .inference.featurizer import featurize
 from .inference.model_loader import load_model
-from .constants import STREAM_NAME, CONSUMER_GROUP, CONSUMER_NAME, DLQ_KEY
+from .constants import STREAM_NAME, CONSUMER_GROUP, CONSUMER_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -86,35 +86,6 @@ def _claim_idle_pending(r, streams: set) -> dict[str, list]:
             pass  # Redis < 6.2 or stream not yet created
     return pending
 
-
-def _drain_all_dlqs(r):
-    """Move messages from all metricade_dlq:{org_id} lists back to their streams."""
-    dlq_keys = _scan_keys(r, f"{DLQ_KEY}:*")
-    for dlq_key in dlq_keys:
-        # Derive corresponding stream key: metricade_dlq:{org_id} → metricade_stream:{org_id}
-        org_id = dlq_key[len(DLQ_KEY) + 1:]
-        stream_key = f"{STREAM_NAME}:{org_id}"
-        moved = 0
-        while True:
-            raw = r.rpop(dlq_key)
-            if raw is None:
-                break
-            try:
-                parsed = json.loads(raw)
-                # Upstash REST LPUSH wraps values in a JSON array: [JSON.stringify(msg)]
-                # Unwrap if needed so we always store a plain enriched dict
-                if isinstance(parsed, list):
-                    for item in parsed:
-                        msg = json.loads(item) if isinstance(item, str) else item
-                        r.xadd(stream_key, {"payload": json.dumps(msg)})
-                        moved += 1
-                else:
-                    r.xadd(stream_key, {"payload": json.dumps(parsed)})
-                    moved += 1
-            except Exception as e:
-                logger.error("DLQ drain error on %s: %s", dlq_key, e)
-        if moved:
-            logger.info("Drained %d messages from %s → %s", moved, dlq_key, stream_key)
 
 
 _SESSION_EVENT_TTL = 4 * 3600  # 4 hours — auto-expire abandoned session accumulators
@@ -221,7 +192,6 @@ def run_subscriber():
             if loop_count % 150 == 0:
                 known_streams = _refresh_streams(redis, known_streams)
                 reclaimed = _claim_idle_pending(redis, known_streams)
-                _drain_all_dlqs(redis)
                 # Clean up expired session cache entries
                 _cleanup_session_cache()
                 # Process reclaimed entries immediately (XREADGROUP > won't re-deliver them)

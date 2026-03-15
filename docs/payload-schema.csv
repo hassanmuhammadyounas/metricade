@@ -1,0 +1,71 @@
+category,field,data_type,always_present,present_on_events,description,example,vectorization_approach,use_in_vector,use_in_metadata
+session_payload,org_id,string,yes,all,Merchant organisation ID,org_3bq2jCKKsVv6,not_used,no,yes
+session_payload,client_id,string,yes,all,Persistent browser identity stored in localStorage — survives sessions. Used as lookup key for prior_session_count enrichment — not encoded directly as a feature,3e0c8efb-4c46-46ab-987f-3b2650ba1e36,not_used,no,yes
+session_payload,session_id,string,yes,all,Per-tab session identity stored in sessionStorage — new on each tab/reload,4e83d9c7-6b43-46d5-b08c-39826bd2e4e5,not_used,no,yes
+session_payload,trace_id,string,yes,all,Unique flush identifier — {session_id}_{flushCounter}_{timestamp},4e83d9c7_2_1773521934657,not_used,no,yes
+session_payload,is_touch,int,yes,all,Whether the device supports touch — 1 or 0,1,binary,yes,no
+session_payload,browser_timezone,string,yes,all,IANA timezone from browser Intl API,Asia/Karachi,not_used,no,no
+session_payload,viewport_w_norm,float,yes,all,Viewport width normalised to 2560px — value between 0 and 1,0.156,passthrough,yes,no
+session_payload,viewport_h_norm,float,yes,all,Viewport height normalised to 1440px — value between 0 and 1,0.563,passthrough,yes,no
+session_payload,is_paid,int,yes,all,Whether session originated from a paid channel — 1 or 0,1,binary,yes,yes
+session_payload,session_source,string,yes,all,Traffic source platform — meta / google / direct / klaviyo etc.,meta,not_used,no,yes
+session_payload,session_medium,string,yes,all,Normalised traffic channel — paid_social / paid_search / organic_social / email / direct etc.,paid_social,djb2_hash_norm,yes,yes
+session_payload,device_pixel_ratio,float,yes,all,Window devicePixelRatio — typically 1 / 1.5 / 2 / 3,2.4375,divide_by_4,yes,no
+session_payload,click_id_type,string,yes,all,Ad click ID parameter found in URL — fbclid / gclid / ttclid / none etc.,fbclid,learned_embedding_dim8,yes,yes
+session_payload,time_to_first_interaction_ms,int|null,yes,all,Milliseconds from page load to first user interaction (scroll / click / touch / keydown) — null if user never interacted (bounce),8229,divide_by_30000,yes,no
+enrichment,received_at,int,yes,all,Unix timestamp in milliseconds when edge worker received the flush,1773521919315,not_used,no,yes
+enrichment,hostname,string,yes,all,Hostname extracted from Origin or Referer header,sukoonfit.com,not_used,no,yes
+enrichment,prior_session_count,int,yes,all,Number of prior sessions for this client_id looked up from Redis (key: metricade_client_sessions:{org_id}:{client_id}) — 0 on first visit injected by edge worker before publishing to stream,3,log1p_norm,yes,no
+enrichment,timezone_mismatch,boolean,yes,all,True if ip_meta.ip_timezone differs from browser_timezone,false,binary,yes,no
+enrichment,ip_meta.ip,string,yes,all,Connecting IP address,2400:adc5:140:3100:1844:2979:5478:655d,not_used,no,no
+enrichment,ip_meta.ip_country,string,yes,all,ISO 2-letter country code from Cloudflare cf object,PK,learned_embedding_dim32,yes,yes
+enrichment,ip_meta.ip_asn,string,yes,all,Autonomous system number,9541,not_used,no,no
+enrichment,ip_meta.ip_org,string,yes,all,ASN organisation name,Cyber Internet Services Pakistan,not_used,no,no
+enrichment,ip_meta.ip_type,string,yes,all,Connection type classified by ASN — residential / datacenter / unknown,residential,residential=0.0 datacenter=1.0 unknown=0.5,yes,yes
+enrichment,ip_meta.ip_timezone,string,yes,all,Timezone derived from IP geolocation,Asia/Karachi,not_used,no,no
+enrichment,ua_meta.browser_family,string,yes,all,Parsed browser name from User-Agent,instagram,learned_embedding_dim10,yes,no
+enrichment,ua_meta.browser_version,string,yes,all,Parsed browser version,420.0.0.55.74,not_used,no,no
+enrichment,ua_meta.os_family,string,yes,all,Parsed operating system name,android,learned_embedding_dim8,yes,no
+enrichment,ua_meta.os_version,string,yes,all,Parsed operating system version,16,not_used,no,no
+enrichment,ua_meta.device_type,string,yes,all,Classified device type — desktop / mobile / tablet / bot / unknown,mobile,learned_embedding_dim4,yes,yes
+enrichment,ua_meta.device_vendor,string,yes,all,Parsed device manufacturer,google,not_used,no,no
+enrichment,ua_meta.is_webview,boolean,yes,all,True if request came from an in-app browser — Instagram / TikTok / Facebook etc.,true,binary,yes,yes
+enrichment,time_features.hour_sin,float,yes,all,Sine encoding of hour of day — sin(2π × hour / 24),-0.601,passthrough,yes,no
+enrichment,time_features.hour_cos,float,yes,all,Cosine encoding of hour of day — cos(2π × hour / 24),0.798,passthrough,yes,no
+enrichment,time_features.dow_sin,float,yes,all,Sine encoding of day of week — sin(2π × dow / 7),-0.781,passthrough,yes,no
+enrichment,time_features.dow_cos,float,yes,all,Cosine encoding of day of week — cos(2π × dow / 7),0.623,passthrough,yes,no
+enrichment,time_features.local_hour,int,yes,all,Local hour at time of ingest (0–23),21,not_used,no,no
+enrichment,time_features.is_weekend,int,yes,all,1 if Saturday or Sunday — 0 otherwise,1,binary,yes,no
+event_base,ts,int,yes,all,Unix timestamp in milliseconds when the event was recorded in the browser,1773521956550,not_used,no,no
+event_base,page_id,string,yes,all,UUID identifying the current page navigation — refreshed on each SPA route change,45c8319b-7d93-467d-a4b7-e6415183971d,dropped,no,no
+event_base,page_load_index,int,yes,all,Sequential page navigation counter within the session — starts at 1,1,passthrough,yes,no
+event_base,event_type,string,yes,all,Type of event — page_view / route_change / scroll / touch_end / click / tab_hidden / tab_visible / engagement_tick / idle,page_view,one_hot_9_classes,yes,no
+event_base,delta_ms,int,yes,all,Milliseconds since the previous event was pushed to the buffer,5490,divide_by_10000,yes,no
+event_base,is_retry,boolean,no,all,Present and true only when this event was re-queued after a failed flush — used to identify retried payloads,true,not_used,no,no
+event_page_view,page_path_hash,string,yes,page_view,FNV-1a 32-bit hash of location.pathname as 8-char hex string,2a0c975e,int_hex_norm,yes,no
+event_page_view,page_url,string,yes,page_view,Full URL including query string at time of page load,https://sukoonfit.com/?utm_source=ig&fbclid=xxx,not_used,no,no
+event_route_change,page_path_hash,string,yes,route_change,FNV-1a 32-bit hash of new pathname after SPA navigation,13177c2e,int_hex_norm,yes,no
+event_route_change,page_url,string,yes,route_change,Full URL after SPA navigation,https://sukoonfit.com/products/xyz,not_used,no,no
+event_scroll,scroll_velocity_px_s,float,yes,scroll,Scroll speed in pixels per second — positive is down negative is up,3670.7,log1p_signed_div10,yes,no
+event_scroll,scroll_acceleration,float,yes,scroll,Rate of change of velocity in px/s² — positive speeding up negative slowing down,173916.6,log1p_signed_div15,yes,no
+event_scroll,scroll_direction,int,yes,scroll,Direction of scroll — 1 down / -1 up / 0 none,1,passthrough,yes,no
+event_scroll,y_reversal,int,yes,scroll,1 if scroll direction flipped from previous event — 0 otherwise,0,binary,yes,no
+event_scroll,scroll_depth_pct,int,yes,scroll,Percentage of page scrolled — 0 at top 100 at bottom,14,divide_by_100,yes,no
+event_scroll,scroll_pause_duration_ms,int,yes,scroll,Milliseconds since last scroll stop before this scroll started — 0 if continuous,18705,divide_by_10000,yes,no
+event_scroll,patch_x,float,yes,scroll,Normalised horizontal scroll position — always 0 for vertical-only scroll,0,not_used,no,no
+event_scroll,patch_y,float,yes,scroll,Normalised vertical position on page — scrollY / scrollHeight between 0 and 1,0.065,passthrough,yes,no
+event_touch_end,tap_interval_ms,int,yes,touch_end,Milliseconds since the previous touch_end event — 0 on first touch,1600,divide_by_5000,yes,no
+event_touch_end,long_press_duration_ms,int,yes,touch_end,Milliseconds finger was held down from touchstart to touchend,116,divide_by_5000,yes,no
+event_touch_end,tap_radius_x,float,yes,touch_end,Horizontal touch contact radius in pixels from Touch.radiusX,11.5,divide_by_50,yes,no
+event_touch_end,tap_radius_y,float,yes,touch_end,Vertical touch contact radius in pixels from Touch.radiusY,11.5,divide_by_50,yes,no
+event_touch_end,tap_pressure,float,yes,touch_end,Touch force from Touch.force — 0 to 1 — most Android devices return 0,0,passthrough,yes,no
+event_touch_end,dead_tap,int,yes,touch_end,1 if touch radius is less than 2px — indicates accidental or ghost tap,0,binary,yes,no
+event_touch_end,patch_x,float,yes,touch_end,Normalised horizontal position of touch centre — clientX / viewportWidth,0.682,passthrough,yes,no
+event_touch_end,patch_y,float,yes,touch_end,Normalised vertical position of touch centre — clientY / viewportHeight,0.502,passthrough,yes,no
+event_click,tap_interval_ms,int,yes,click,Milliseconds since the previous click event — 0 on first click,800,divide_by_5000,yes,no
+event_click,patch_x,float,yes,click,Normalised horizontal position of click — clientX / viewportWidth,0.45,passthrough,yes,no
+event_click,patch_y,float,yes,click,Normalised vertical position of click — clientY / viewportHeight,0.3,passthrough,yes,no
+event_click,dead_tap,int,yes,click,1 if click target is not an interactive element — A / button / input / label etc.,0,binary,yes,no
+event_tab_visible,backgrounded_ms,int,yes,tab_visible,Milliseconds the tab spent hidden before becoming visible again,3200,divide_by_60000,yes,no
+event_engagement_tick,active_ms,int,yes,engagement_tick,Milliseconds since last user activity at time of tick — always less than 5000,320,divide_by_5000,yes,no
+event_idle,idle_duration_ms,int,yes,idle,Milliseconds since last user activity when idle threshold was crossed — always >= 5000,5002,divide_by_30000,yes,no

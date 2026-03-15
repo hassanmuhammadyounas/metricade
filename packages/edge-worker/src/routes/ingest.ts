@@ -3,6 +3,7 @@ import { Env, Variables } from '../index';
 import { enrichIp } from '../enrichment/ip-enrichment';
 import { enrichUa } from '../enrichment/ua-enrichment';
 import { encodeTime } from '../enrichment/time-encoding';
+import { enrichClientHistory } from '../enrichment/client-enrichment';
 import { publishToStream } from '../transport/redis-publisher';
 import { ingestSharedSecretHeader } from '../constants';
 import { notifySlack } from '../alerts/slack';
@@ -50,6 +51,12 @@ export async function ingest(c: Context<{ Bindings: Env; Variables: Variables }>
   let hostname = '';
   try { hostname = originHeader ? new URL(originHeader).hostname : ''; } catch { hostname = ''; }
 
+  const clientId  = typeof body.client_id  === 'string' ? body.client_id  : '';
+  const sessionId = typeof body.session_id === 'string' ? body.session_id : '';
+  const priorSessionCount = clientId && sessionId
+    ? await enrichClientHistory(c.env, orgId, clientId, sessionId, c.executionCtx.waitUntil.bind(c.executionCtx))
+    : 0;
+
   const enriched = {
     trace_id: traceId,
     org_id: orgId,
@@ -59,6 +66,7 @@ export async function ingest(c: Context<{ Bindings: Env; Variables: Variables }>
     ua_meta: uaMeta,
     time_features: encodeTime(now),
     timezone_mismatch: timezoneMismatch,
+    prior_session_count: priorSessionCount,
     payload: body,
   };
 

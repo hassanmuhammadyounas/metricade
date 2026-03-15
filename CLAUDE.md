@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Browser (pixel.js)
   └─> Cloudflare Edge Worker (Hono)       POST /ingest  →  worker.metricade.com
           └─> Upstash Redis Streams        metricade_stream:{org_id}
-                  └─> Fly.io Inference Worker  Transformer → 192-dim vector
+                  └─> Fly.io Vector Worker  accumulate → featurize → raw feature vector
                           └─> Upstash Vector   cosine similarity, keyed by session_id
 ```
 
@@ -22,7 +22,7 @@ All deployments are **manual**. There is no CI/CD.
 |--------------------|-----------------------------------------------------|-----------------------|
 | Pixel CDN          | https://pixel.metricade.com/pixel.min.js            | Cloudflare Pages      |
 | Edge Worker        | https://worker.metricade.com                        | Cloudflare Workers    |
-| Inference Worker   | https://behavioral-inference.fly.dev                | Fly.io (`iad` region) |
+| Vector Worker      | https://behavioral-inference.fly.dev                | Fly.io (`iad` region) |
 | Redis              | https://singular-fawn-58838.upstash.io              | Upstash               |
 | Vector DB          | https://bright-tiger-54944-us1-vector.upstash.io    | Upstash Vector        |
 
@@ -61,9 +61,9 @@ wrangler secret put INGEST_SHARED_SECRET
 wrangler secret put SLACK_WEBHOOK_URL
 ```
 
-### inference-worker (`packages/inference-worker/`)
+### vector-worker (`packages/vector-worker/`)
 ```bash
-cd packages/inference-worker
+cd packages/vector-worker
 pip install -r requirements.txt
 python -m py_compile src/inference/featurizer.py   # syntax check
 fly deploy
@@ -85,7 +85,7 @@ Fly config (`fly.toml`):
 
 ## Testing & Validation
 
-### Check inference worker logs
+### Check vector worker logs
 ```bash
 fly logs --app behavioral-inference --no-tail 2>&1 | tail -50
 ```
@@ -121,15 +121,16 @@ for v in r.json().get('result',{}).get('vectors',[]):
   ```
   {
     org_id, client_id, session_id,
-    trace_id,           // {session_id}_{flushCounter}_{timestamp}
+    trace_id,                           // {session_id}_{flushCounter}_{timestamp}
     is_touch, browser_timezone,
     viewport_w_norm, viewport_h_norm,   // normalized to 2560×1440
     is_paid, session_source, session_medium,
     device_pixel_ratio, click_id_type,
+    time_to_first_interaction_ms,       // null on bounce; ms from page load to first scroll/click/touch/keydown
     events: [...]
   }
   ```
-- **Transport**: `fetch` with `keepalive: true` + `x-ingest-secret` header when tab visible; `sendBeacon` with `?s=SECRET` query param on `pagehide` (sendBeacon cannot set headers). If `sendBeacon` returns `false` (browser queue full), falls back to keepalive fetch. On non-200 response, events are re-queued into the buffer for retry.
+- **Transport**: `fetch` with `keepalive: true` + `x-ingest-secret` header when tab visible; `sendBeacon` with `?s=SECRET` query param on `pagehide` (sendBeacon cannot set headers). If `sendBeacon` returns `false` (browser queue full), falls back to keepalive fetch. On non-200 response, events are re-queued into the buffer for retry with `is_retry: true` flag on each event.
 - **Event types**:
   - `page_view` — fires on every page load (initial load, full navigation). Contains `page_path_hash` + `page_url`. This is the primary page tracking event.
   - `route_change` — fires on SPA navigation only (`popstate` / `hashchange`). Also contains `page_path_hash` + `page_url`.
@@ -157,86 +158,102 @@ for v in r.json().get('result',{}).get('vectors',[]):
   - `time_features`: `{ hour_sin, hour_cos, dow_sin, dow_cos, local_hour, is_weekend }` — sin/cos encoded from server clock at time of ingest
   - `timezone_mismatch`: boolean — `ip_meta.ip_timezone !== browser_timezone`
   - `hostname`: extracted from `Origin` or `Referer` header
+  - `prior_session_count`: integer — number of prior sessions for this `client_id` (key: `metricade_client_sessions:{org_id}:{client_id}`). Session dedup via `SETNX metricade_new_sess:{org_id}:{session_id}` (4h TTL). First visit = 0. INCR is fire-and-forget via `ctx.waitUntil`.
 - **Publishing**: always attempts `XADD` to stream. Falls back to `LPUSH` on `metricade_dlq:{org_id}` only if XADD fails. If both fail, throws → returns 500 to pixel (pixel re-queues events for retry).
 - **Slack alerting** (`src/alerts/slack.ts`): `notifySlack(webhookUrl, message)` — called on Redis failure. Requires `SLACK_WEBHOOK_URL` secret.
 - Full enriched message serialized as a single `payload` JSON field in the stream entry
 
-### inference-worker (`packages/inference-worker/`)
+### vector-worker (`packages/vector-worker/`)
 - Entry point: `src/main.py` — starts subscriber thread (`run_subscriber`) and HTTP health server (uvicorn on port 8080)
 - **Processing loop** (`src/subscriber.py`):
   1. `XREADGROUP` — consume new messages from all discovered `metricade_stream:{org_id}` streams
   2. Accumulate events: `_accumulate_events()` merges new flush events into `metricade_sess:{org_id}:{session_id}` in Redis (GET + SETEX, 4h TTL). Has an in-memory cache (60s TTL) to avoid Redis reads on hot sessions.
-  3. `featurize(merged_payload, enriched)` — produces `[64, 51]` float32 tensor
+  3. `featurize(merged_payload, enriched)` — produces `FeatureOutput(cont=[64, N_CONT], cat=[N_CAT])` — see Feature Vector section below
   4. `model.encode(features)` — Transformer → L2-normalized 192-dim vector
   5. `upsert_vector(session_id, vector, meta)` — keyed by `session_id` (one vector per session, upserted on every flush)
   6. `XACK`
-- Every 150 loops (~5 min): re-scan for new org streams, run `XAUTOCLAIM` to reclaim idle PEL messages (idle >60s), drain DLQs back to streams, clean up expired in-memory session cache.
-- **Model** (`src/inference/transformer.py`): `BehavioralTransformer` — Linear(51→128) → TransformerEncoder(d_model=128, nhead=4, num_layers=2) → mean pooling over sequence → Linear(128→192) → L2 normalize. Falls back to random init if model file not found at `MODEL_PATH`.
+- Every 150 loops (~5 min): re-scan for new org streams, run `XAUTOCLAIM` to reclaim idle PEL messages (idle >60s), clean up expired in-memory session cache.
+- **DLQ**: owned entirely by the edge worker. Vector worker does NOT drain DLQ.
+- **Model** (`src/inference/transformer.py`): `BehavioralTransformer` — nn.Embedding tables (browser, os, country, click_id, device_type) → concat with continuous features → Linear(N_CONT+62→128) → CLS token + TransformerEncoder(d_model=128, nhead=4, num_layers=2) → CLS output → Linear(128→192) → L2 normalize. Falls back to random init if model file not found at `MODEL_PATH`. All embedding tables start random and become meaningful after training on real sessions.
 - **Spot-check**: 1% of upserts are read back from Upstash Vector to verify persistence (`SPOT_CHECK_RATE=0.01`).
 - **`src/constants.py` default values are wrong** (`behavioral_stream`, `behavioral_dlq`) — always overridden by `fly.toml` env vars.
+- **Multi-org model strategy**: Two-tier — per-org model file (`models/{org_id}.pt`) for orgs with sufficient data; falls back to segment model (`models/segment_low_aov.pt` / `segment_mid_aov.pt` / `segment_high_aov.pt`) for new/small orgs. Segment assigned at org onboarding via `metricade_org:{org_id}` Redis key. Training pipeline is a separate offline script — not yet implemented.
 
 ---
 
 ## Feature Vector — Complete Reference
 
-`packages/inference-worker/src/inference/featurizer.py` produces a `[64, 51]` float32 tensor. `featurizer.py` is the single source of truth for feature ordering.
+`packages/vector-worker/src/inference/featurizer.py` produces a `FeatureOutput` dataclass:
+- `cont`: `[64, N_CONT]` float32 tensor — continuous features per event row
+- `cat`: `[5]` int64 tensor — session-level categorical indices (one per categorical field)
 
-- **64 rows** = up to 64 events per session (zero-padded). Events are the full accumulated sequence across all flushes for the session, oldest first.
-- **51 features** per event row — see table below.
+**64 rows** = up to 64 events per session (zero-padded). Oldest event first.
 
-All values normalized to approximately [0, 1] or [-1, 1]. Strings encoded as djb2 hash / 0xFFFFFFFF.
 `page_path_hash` from pixel.js is a hex string — parsed with `int(val, 16) / 0xFFFFFFFF`.
-Session-level fields (26–41) use `_pget()`: reads from payload root first, falls back to `page_view` event for backwards compatibility with old stream entries.
+Session-level fields use `_pget()`: reads from payload root first, falls back to `page_view` event for backwards compatibility.
 
-**Known discrepancy**: `featurizer.py` one-hot encoding and `_pget()` fallback still reference `"init"` as an event type. The pixel now emits `"page_view"` instead of `"init"`. The featurizer needs updating: replace `"init"` with `"page_view"` in `_one_hot_event_type()` and in the `_extract_session()` fallback lookup. `engagement_tick` and `idle` are also not yet encoded.
+### Continuous features (`cont` tensor — per event row)
 
 | Index | Feature | Source | Encoding |
 |-------|---------|--------|----------|
-| 0 | event_type == page_view | event | one-hot (1 or 0) |
+| 0 | event_type == page_view | event | one-hot |
 | 1 | event_type == route_change | event | one-hot |
 | 2 | event_type == scroll | event | one-hot |
 | 3 | event_type == touch_end | event | one-hot |
 | 4 | event_type == click | event | one-hot |
 | 5 | event_type == tab_hidden | event | one-hot |
 | 6 | event_type == tab_visible | event | one-hot |
-| 7 | delta_ms | event | / 10000 |
-| 8 | scroll_velocity_px_s | event | / 1000 |
-| 9 | scroll_acceleration | event | / 500 |
-| 10 | y_reversal | event | bool (0 or 1) |
-| 11 | scroll_depth_pct | event | / 100 |
-| 12 | tap_interval_ms | event | / 5000 |
-| 13 | tap_radius_x | event | / 50 |
-| 14 | dead_tap | event | bool |
-| 15 | tap_pressure | event | / 1 (already 0–1) |
-| 16 | patch_x | event | / 1 (already 0–1) |
-| 17 | patch_y | event | / 1 (already 0–1) |
-| 18 | scroll_direction | event | -1 / 0 / 1 |
-| 19 | scroll_pause_duration_ms | event | / 10000 |
-| 20 | page_load_index | event | raw int (page nav count) |
-| 21 | long_press_duration_ms | event | / 5000 |
-| 22 | page_path_hash | event (hex string) | int(val,16) / 0xFFFFFFFF; falls back to page_view event's value |
-| 23 | page_id | event | djb2 hash / 0xFFFFFFFF |
-| 24 | is_webview | enriched.ua_meta.is_webview | bool |
-| 25 | is_touch | enriched.ua_meta.device_type in (mobile, tablet) | bool |
-| 26 | is_paid | payload.is_paid (fallback: page_view event) | bool |
-| 27 | click_id_type | payload.click_id_type (fallback: page_view event) | djb2 hash / 0xFFFFFFFF |
-| 28 | ip_type | enriched.ip_meta.ip_type | residential=0.0, datacenter=1.0, unknown=0.5 |
-| 29 | ip_country | enriched.ip_meta.ip_country (ISO code) | djb2 hash / 0xFFFFFFFF |
-| 30 | tap_radius_y | event | / 50 |
-| 31 | device_pixel_ratio | payload (fallback: page_view event) | min(val, 4.0) / 4.0 |
-| 32 | viewport_w_norm | payload (fallback: page_view event) | already 0–1 (viewport/2560) |
-| 33 | viewport_h_norm | payload (fallback: page_view event) | already 0–1 (viewport/1440) |
-| 34 | browser_family | enriched.ua_meta.browser_family | djb2 hash / 0xFFFFFFFF |
-| 35 | os_family | enriched.ua_meta.os_family | djb2 hash / 0xFFFFFFFF |
-| 36 | hour_sin | enriched.time_features.hour_sin | sin(2π × hour/24) |
-| 37 | hour_cos | enriched.time_features.hour_cos | cos(2π × hour/24) |
-| 38 | dow_sin | enriched.time_features.dow_sin | sin(2π × dow/7) |
-| 39 | dow_cos | enriched.time_features.dow_cos | cos(2π × dow/7) |
-| 40 | is_weekend | enriched.time_features.is_weekend | bool |
-| 41 | timezone_mismatch | enriched.timezone_mismatch | bool (ip_timezone ≠ browser_timezone) |
-| 42–50 | reserved | — | 0.0 |
+| 7 | event_type == engagement_tick | event | one-hot |
+| 8 | event_type == idle | event | one-hot |
+| 9 | delta_ms | event | / 10000 |
+| 10 | scroll_velocity_px_s | event | sign(v) × log1p(abs(v)) / 10 |
+| 11 | scroll_acceleration | event | sign(a) × log1p(abs(a)) / 15 |
+| 12 | y_reversal | event | bool |
+| 13 | scroll_depth_pct | event | / 100 |
+| 14 | tap_interval_ms | event | / 5000 |
+| 15 | tap_radius_x | event | / 50 |
+| 16 | dead_tap | event | bool |
+| 17 | tap_pressure | event | passthrough (0–1) |
+| 18 | patch_x | event | passthrough (0–1) |
+| 19 | patch_y | event | passthrough (0–1) |
+| 20 | scroll_direction | event | -1 / 0 / 1 |
+| 21 | scroll_pause_duration_ms | event | / 10000 |
+| 22 | page_load_index | event | raw int |
+| 23 | long_press_duration_ms | event | / 5000 |
+| 24 | page_path_hash | event (hex string) | int(val,16) / 0xFFFFFFFF |
+| 25 | tap_radius_y | event | / 50 |
+| 26 | is_webview | enriched.ua_meta.is_webview | bool |
+| 27 | is_touch | ua_meta.device_type in (mobile, tablet) | bool |
+| 28 | is_paid | payload root (fallback: page_view event) | bool |
+| 29 | ip_type | enriched.ip_meta.ip_type | residential=0.0, datacenter=1.0, unknown=0.5 |
+| 30 | device_pixel_ratio | payload root (fallback: page_view event) | min(val, 4.0) / 4.0 |
+| 31 | viewport_w_norm | payload root | already 0–1 (viewport/2560) |
+| 32 | viewport_h_norm | payload root | already 0–1 (viewport/1440) |
+| 33 | hour_sin | enriched.time_features | sin(2π × hour/24) |
+| 34 | hour_cos | enriched.time_features | cos(2π × hour/24) |
+| 35 | dow_sin | enriched.time_features | sin(2π × dow/7) |
+| 36 | dow_cos | enriched.time_features | cos(2π × dow/7) |
+| 37 | is_weekend | enriched.time_features | bool |
+| 38 | timezone_mismatch | enriched.timezone_mismatch | bool (ip_timezone ≠ browser_timezone) |
+| 39 | prior_session_count | enriched.prior_session_count | log1p(val) / log1p(20), capped at 1.0 |
 
-**When adding a new feature**: update only `featurizer.py` — there is no separate feature-list file.
+**Dropped**: `page_id` (was index 23 — pure noise, unique UUID per page, model can never learn from it).
+
+### Categorical features (`cat` tensor — session-level, integer indices)
+
+These are looked up in `nn.Embedding` tables inside `BehavioralTransformer`. Index 0 = unknown/fallback for any value not in vocabulary.
+
+| cat index | Feature | Source | Vocab size | Embed dim |
+|-----------|---------|--------|-----------|-----------|
+| 0 | browser_family | enriched.ua_meta.browser_family | ~20 | 10 |
+| 1 | os_family | enriched.ua_meta.os_family | ~15 | 8 |
+| 2 | ip_country | enriched.ip_meta.ip_country (ISO code) | ~250 | 32 |
+| 3 | click_id_type | payload.click_id_type | ~10 | 8 |
+| 4 | device_type | enriched.ua_meta.device_type | 5 | 4 |
+
+Total embedding output = 10+8+32+8+4 = **62 dims** (concatenated, broadcast to all event rows, then concatenated with `cont` before `input_proj`).
+
+**When adding a new feature**: update only `featurizer.py` for continuous features, or add a new `nn.Embedding` entry in `transformer.py` for categorical features.
 
 ---
 
@@ -244,9 +261,11 @@ Session-level fields (26–41) use `_pget()`: reads from payload root first, fal
 
 | Key pattern | Type | Purpose |
 |-------------|------|---------|
-| `metricade_stream:{org_id}` | Stream | Ingest event stream, consumed by inference worker |
-| `metricade_dlq:{org_id}` | List | Dead-letter queue — populated only on XADD failure |
+| `metricade_stream:{org_id}` | Stream | Ingest event stream, consumed by vector worker |
+| `metricade_dlq:{org_id}` | List | Dead-letter queue — populated by edge worker only on XADD failure; drained back to stream every minute by cron |
 | `metricade_sess:{org_id}:{session_id}` | String (JSON) | Accumulated event list for session, TTL 4h |
+| `metricade_new_sess:{org_id}:{session_id}` | String | Session dedup key for prior_session_count — SETNX on first flush, TTL 4h |
+| `metricade_client_sessions:{org_id}:{client_id}` | String (int) | Running count of sessions seen for this client_id — incremented on each new session, no TTL |
 
 ---
 
@@ -277,7 +296,9 @@ Each vector stored in Upstash Vector has the following metadata:
 - The Transformer outputs L2-normalized 192-dim vectors — cosine similarity in Upstash Vector is equivalent to dot product on these vectors
 - One vector per `session_id` — multiple flushes upsert the same vector slot; accumulated events are stored in `metricade_sess:*` Redis keys
 - `page_path_hash` from pixel.js is always a hex string (FNV-1a, `.toString(16)`) — never parse with `float()` directly, use `int(val, 16)`
-- Session-level fields (`is_paid`, `click_id_type`, `device_pixel_ratio`, `viewport_w_norm`, `viewport_h_norm`) live at the flush payload root — the featurizer reads them via `_pget()` which falls back to the `page_view` event for old stream entries
+- Session-level fields (`is_paid`, `click_id_type`, `device_pixel_ratio`, `viewport_w_norm`, `viewport_h_norm`, `time_to_first_interaction_ms`) live at the flush payload root — the featurizer reads them via `_pget()` which falls back to the `page_view` event for old stream entries
+- `prior_session_count` is injected as enrichment by the edge worker. The value is frozen at first flush of a session (stored in `metricade_new_sess:{org_id}:{session_id}`) so all flushes of the same session report the same count. The client counter (`metricade_client_sessions:{org_id}:{client_id}`) is incremented fire-and-forget via `ctx.waitUntil`.
 - **`src/constants.py` defaults are wrong** — always rely on `fly.toml` env vars overriding them
 - No test framework configured for edge-worker or pixel — add if needed
 - All deployments are manual — no CI/CD
+- Learned embeddings (`nn.Embedding` tables) are initialized randomly and produce meaningless vectors until the model is trained on real session data (~5,000 sessions minimum, ~20,000 for reliable embeddings). Collecting data now is the priority — training comes later.

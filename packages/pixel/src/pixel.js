@@ -74,8 +74,9 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
       is_paid:            _isPaid ? 1 : 0,
       session_source:     _sessionSource,
       session_medium:     _sessionMedium,
-      device_pixel_ratio: window.devicePixelRatio || 1,
-      click_id_type:      _clickIdType,
+      device_pixel_ratio:          window.devicePixelRatio || 1,
+      click_id_type:               _clickIdType,
+      time_to_first_interaction_ms: _firstInteractionMs,
       events:             buffer.splice(0),
     };
     send(payload);
@@ -151,6 +152,13 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
     _sessionSource = 'direct';
     _sessionMedium = 'direct';
     _isPaid        = false;
+  }
+
+  // ─── Time to first interaction ────────────────────────────────────────────
+  const _pageLoadTs = Date.now();
+  let _firstInteractionMs = null;
+  function _recordFirstInteraction() {
+    if (_firstInteractionMs === null) _firstInteractionMs = Date.now() - _pageLoadTs;
   }
 
   // ─── Device context (captured once at load) ───────────────────────────────
@@ -325,10 +333,10 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
     idleFired = false;
   }
 
-  window.addEventListener('scroll',     onActivity, { passive: true });
-  window.addEventListener('click',      onActivity, { passive: true });
-  window.addEventListener('touchstart', onActivity, { passive: true });
-  window.addEventListener('keydown',    onActivity, { passive: true });
+  window.addEventListener('scroll',     () => { _recordFirstInteraction(); onActivity(); }, { passive: true });
+  window.addEventListener('click',      () => { _recordFirstInteraction(); onActivity(); }, { passive: true });
+  window.addEventListener('touchstart', () => { _recordFirstInteraction(); onActivity(); }, { passive: true });
+  window.addEventListener('keydown',    () => { _recordFirstInteraction(); onActivity(); }, { passive: true });
 
   setInterval(() => {
     if (document.visibilityState === 'hidden') return;
