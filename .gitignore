@@ -29,8 +29,8 @@ dist/
 .pytest_cache/
 
 # Model weights (large binary files — store in object storage, not git)
-packages/inference-worker/models/*.pt
-!packages/inference-worker/models/bootstrap_random.pt
+packages/model-worker/models/*.pt
+!packages/model-worker/models/bootstrap_random.pt
 
 # OS
 .DS_Store
