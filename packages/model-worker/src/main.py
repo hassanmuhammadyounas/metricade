@@ -1,6 +1,7 @@
 """
 Entry point — starts subscriber thread, then serves health endpoint.
 """
+import os
 import threading
 import logging
 import uvicorn
@@ -25,7 +26,8 @@ def main():
 
     # Serve health endpoint on port 8080 (Fly.io internal only)
     app = create_app()
-    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="warning")
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
 
 
 if __name__ == "__main__":

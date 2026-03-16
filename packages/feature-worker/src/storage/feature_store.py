@@ -8,6 +8,7 @@ Serialization format: numpy npz
   - "cat":  int64   [N_CAT]
 """
 import io
+import base64
 import logging
 import numpy as np
 import redis as redis_lib
@@ -39,7 +40,7 @@ def store_features(
     npz_bytes = buf.read()
 
     feature_key = f"{FEATURE_STORE_KEY_PREFIX}:{org_id}:{session_id}"
-    r.setex(feature_key, FEATURE_TTL_SECONDS, npz_bytes)
+    r.setex(feature_key, FEATURE_TTL_SECONDS, base64.b64encode(npz_bytes).decode())
 
     stream_key = f"{FEATURES_STREAM_NAME}:{org_id}"
     pointer = {

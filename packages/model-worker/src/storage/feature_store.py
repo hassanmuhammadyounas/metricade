@@ -7,6 +7,7 @@ Serialization format: numpy npz
   - "cat":  int64   [N_CAT]
 """
 import io
+import base64
 import logging
 import numpy as np
 import redis as redis_lib
@@ -24,7 +25,8 @@ def load_features(r: redis_lib.Redis, feature_key: str):
     raw = r.get(feature_key)
     if raw is None:
         return None
-    buf = io.BytesIO(raw)
+    npz_bytes = base64.b64decode(raw) if isinstance(raw, (str, bytes)) else raw
+    buf = io.BytesIO(npz_bytes)
     data = np.load(buf)
     cont = torch.from_numpy(data["cont"].astype(np.float32))
     cat = torch.from_numpy(data["cat"].astype(np.int64))
