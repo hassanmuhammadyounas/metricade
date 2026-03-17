@@ -66,33 +66,62 @@ wrangler secret put INGEST_SHARED_SECRET
 wrangler secret put SLACK_WEBHOOK_URL
 ```
 
-### vector-worker (`packages/vector-worker/`)
+### feature-worker (`packages/feature-worker/`)
 ```bash
-cd packages/vector-worker
+cd packages/feature-worker
 pip install -r requirements.txt
-python -m py_compile src/inference/featurizer.py   # syntax check
-fly deploy
+fly deploy --app metricade-feature-worker
 ```
 Secrets (set once, persist on Fly):
 ```bash
 fly secrets set \
-  UPSTASH_REDIS_URL=... \
+  UPSTASH_REDIS_URL="https://singular-fawn-58838.upstash.io" \
   UPSTASH_REDIS_TOKEN=... \
-  UPSTASH_VECTOR_URL=... \
-  UPSTASH_VECTOR_TOKEN=...
+  --app metricade-feature-worker
 ```
 Fly config (`fly.toml`):
-- App: `behavioral-inference`, region: `iad`
+- App: `metricade-feature-worker`, region: `iad`
 - VM: `shared-cpu-1x`, 512 MB RAM
-- Env vars set in `fly.toml` (non-secret): `STREAM_NAME=metricade_stream`, `DLQ_KEY=metricade_dlq`, `CONSUMER_GROUP=inference_group`, `CONSUMER_NAME=fly_worker_1`, `VECTOR_DIMS=192`, `MODEL_PATH=/models/v1_simclr_trained.pt`, `SPOT_CHECK_RATE=0.01`
+- Env vars (non-secret): `STREAM_NAME=metricade_stream`, `CONSUMER_GROUP=feature_group`, `CONSUMER_NAME=feature_worker_1`, `DLQ_KEY=metricade_dlq`, `FEATURES_STREAM_NAME=metricade_features_stream`, `FEATURE_STORE_KEY_PREFIX=metricade_features`
+
+### model-worker (`packages/model-worker/`)
+```bash
+cd packages/model-worker
+pip install -r requirements.txt
+# Generate bootstrap weights first (one-time, from repo root):
+python scripts/generate_bootstrap.py
+fly deploy --app metricade-model-worker
+```
+Secrets (set once, persist on Fly):
+```bash
+fly secrets set \
+  UPSTASH_REDIS_URL="https://singular-fawn-58838.upstash.io" \
+  UPSTASH_REDIS_TOKEN=... \
+  UPSTASH_VECTOR_URL="https://bright-tiger-54944-us1-vector.upstash.io" \
+  UPSTASH_VECTOR_TOKEN=... \
+  --app metricade-model-worker
+```
+Fly config (`fly.toml`):
+- App: `metricade-model-worker`, region: `iad`
+- VM: `shared-cpu-1x`, 512 MB RAM
+- Env vars (non-secret): `CONSUMER_GROUP=model_group`, `CONSUMER_NAME=model_worker_1`, `FEATURES_STREAM_NAME=metricade_features_stream`, `FEATURE_STORE_KEY_PREFIX=metricade_features`, `MODELS_DIR=/app/models`, `VECTOR_DIMS=192`, `SPOT_CHECK_RATE=0.01`
+- Do **NOT** set `QDRANT_URL` in production — absence causes vector_client to default to Upstash Vector
+
+### ~~vector-worker~~ (deprecated — scaled to zero, replaced by feature-worker + model-worker)
+```bash
+# App: behavioral-inference — kept on Fly.io at 0 machines for rollback only
+fly scale count 0 --app behavioral-inference   # already done
+fly scale count 1 --app behavioral-inference   # rollback if needed
+```
 
 ---
 
 ## Testing & Validation
 
-### Check vector worker logs
+### Check worker logs
 ```bash
-fly logs --app behavioral-inference --no-tail 2>&1 | tail -50
+fly logs --app metricade-feature-worker --no-tail 2>&1 | tail -50
+fly logs --app metricade-model-worker --no-tail 2>&1 | tail -50
 ```
 
 ### Inspect live vectors (Python one-liner)

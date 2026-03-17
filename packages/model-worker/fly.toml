@@ -15,7 +15,7 @@ primary_region = 'iad'
   ENVIRONMENT = 'production'
   FEATURES_STREAM_NAME = 'metricade_features_stream'
   FEATURE_STORE_KEY_PREFIX = 'metricade_features'
-  MODELS_DIR = '/models'
+  MODELS_DIR = '/app/models'
   SPOT_CHECK_RATE = '0.01'
   VECTOR_DIMS = '192'
 
