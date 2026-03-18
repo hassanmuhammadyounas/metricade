@@ -85,3 +85,70 @@ class UpstashRestClient:
                 entries.append((entry_id, fields))
             out.append((stream_name, entries))
         return out
+
+    def xgroup_create(self, stream: str, group: str, id: str = "$", mkstream: bool = True) -> bool:
+        """Create a consumer group. Returns True on success, False if already exists (BUSYGROUP)."""
+        args = ["XGROUP", "CREATE", stream, group, id]
+        if mkstream:
+            args.append("MKSTREAM")
+        try:
+            self._cmd(*args)
+            return True
+        except Exception as e:
+            if "BUSYGROUP" in str(e):
+                return False
+            raise
+
+    def xreadgroup(self, group: str, consumer: str, streams: dict, count: int = None):
+        """Read undelivered messages as a consumer group member. streams = {stream_key: '>'}"""
+        args = ["XREADGROUP", "GROUP", group, consumer]
+        if count is not None:
+            args += ["COUNT", str(count)]
+        args.append("STREAMS")
+        stream_keys = list(streams.keys())
+        stream_ids = list(streams.values())
+        args += stream_keys + stream_ids
+
+        result = self._cmd(*args)
+        if not result:
+            return []
+        out = []
+        for stream_data in result:
+            stream_name = stream_data[0]
+            entries = []
+            for entry in stream_data[1]:
+                entry_id = entry[0]
+                flat = entry[1]
+                fields = {}
+                for i in range(0, len(flat), 2):
+                    fields[flat[i]] = flat[i + 1]
+                entries.append((entry_id, fields))
+            out.append((stream_name, entries))
+        return out
+
+    def xack(self, stream: str, group: str, *entry_ids) -> int:
+        """Acknowledge processed entries. Returns number of acked entries."""
+        args = ["XACK", stream, group] + list(entry_ids)
+        return int(self._cmd(*args) or 0)
+
+    def xautoclaim(self, stream: str, group: str, consumer: str, min_idle_ms: int,
+                   start: str = "0-0", count: int = None):
+        """Reclaim pending entries idle longer than min_idle_ms.
+        Returns (next_start_id, entries, deleted_ids)."""
+        args = ["XAUTOCLAIM", stream, group, consumer, str(min_idle_ms), start]
+        if count is not None:
+            args += ["COUNT", str(count)]
+        result = self._cmd(*args)
+        if not result:
+            return "0-0", [], []
+        next_id = result[0]
+        entries = []
+        for entry in (result[1] or []):
+            entry_id = entry[0]
+            flat = entry[1]
+            fields = {}
+            for i in range(0, len(flat), 2):
+                fields[flat[i]] = flat[i + 1]
+            entries.append((entry_id, fields))
+        deleted = result[2] if len(result) > 2 else []
+        return next_id, entries, deleted

@@ -1,18 +1,24 @@
 """
-XREAD polling loop — scan for org streams → poll new entries → featurize → store → repeat.
-No consumer groups. Tracks last-seen entry ID per stream in memory.
+XREADGROUP consumer group loop — exactly-once delivery across multiple machines.
+Each Fly.io machine gets a unique consumer name (FLY_MACHINE_ID or UUID).
+All machines share the same group, so every ingest entry is processed by exactly one machine.
 """
 import json
 import logging
+import os
 import time
+import uuid
 
 from .storage.redis_client import get_redis_client
 from .storage.feature_store import store_features
 from .inference.featurizer import featurize
 from .inference.token_merger import merge_tokens
-from .constants import STREAM_NAME
+from .constants import STREAM_NAME, CONSUMER_GROUP
 
 logger = logging.getLogger(__name__)
+
+# Unique per machine — FLY_MACHINE_ID on Fly.io, random UUID locally
+CONSUMER_NAME: str = os.environ.get("FLY_MACHINE_ID") or str(uuid.uuid4())
 
 _features_stored: int = 0
 _queue_depth: int = 0
@@ -34,6 +40,15 @@ def _scan_keys(r, pattern: str) -> list[str]:
         if cursor == 0 or str(cursor) == "0":
             break
     return found
+
+
+def _ensure_consumer_group(redis, stream: str) -> None:
+    """Create consumer group with $ (new messages only). No-op if already exists."""
+    created = redis.xgroup_create(stream, CONSUMER_GROUP, id="$", mkstream=True)
+    if created:
+        logger.info("Created consumer group %s on %s", CONSUMER_GROUP, stream)
+    else:
+        logger.debug("Consumer group %s already exists on %s", CONSUMER_GROUP, stream)
 
 
 def _accumulate_events(redis, org_id: str, session_id: str, new_events: list) -> list:
@@ -102,8 +117,26 @@ def _process_entries(redis, stream_key: str, entries: list) -> None:
             store_features(redis, org_id, session_id, merged_cont, features.cat, metadata)
             _features_stored += 1
             logger.info("Stored features for session %s (org=%s)", session_id, org_id)
+
+            # Ack only after successful processing — unacked entries are reclaimed on restart
+            redis.xack(stream_key, CONSUMER_GROUP, entry_id)
+
         except Exception as e:
             logger.error("Failed to process entry %s: %s", entry_id, e, exc_info=True)
+            # Do not ack — will be reclaimed by XAUTOCLAIM after 60s idle
+
+
+def _reclaim_pending(redis, stream: str) -> None:
+    """On startup, reclaim any entries this consumer had in-flight and never acked."""
+    try:
+        next_id, entries, _ = redis.xautoclaim(
+            stream, CONSUMER_GROUP, CONSUMER_NAME, min_idle_ms=60_000, start="0-0", count=50
+        )
+        if entries:
+            logger.info("Reclaimed %d pending entries from %s", len(entries), stream)
+            _process_entries(redis, stream, entries)
+    except Exception as e:
+        logger.warning("XAUTOCLAIM failed for %s: %s", stream, e)
 
 
 def run_subscriber():
@@ -111,11 +144,12 @@ def run_subscriber():
 
     redis = get_redis_client()
     known_streams: set[str] = set()
-    # last_ids: per-stream cursor — "0" means read from beginning, "$" means only new
-    last_ids: dict[str, str] = {}
     loop_count = 0
 
-    logger.info("Subscriber ready — scanning for %s:* streams", STREAM_NAME)
+    logger.info(
+        "Subscriber ready — consumer=%s group=%s scanning for %s:* streams",
+        CONSUMER_NAME, CONSUMER_GROUP, STREAM_NAME,
+    )
 
     while True:
         try:
@@ -125,7 +159,8 @@ def run_subscriber():
                 new_streams = all_keys - known_streams
                 for key in new_streams:
                     logger.info("Discovered new org stream: %s", key)
-                    last_ids[key] = "0"  # read from beginning
+                    _ensure_consumer_group(redis, key)
+                    _reclaim_pending(redis, key)
                 known_streams = all_keys
             loop_count += 1
 
@@ -133,7 +168,13 @@ def run_subscriber():
                 time.sleep(2)
                 continue
 
-            messages = redis.xread(streams=last_ids, count=50)
+            # XREADGROUP with ">" — only undelivered messages
+            messages = redis.xreadgroup(
+                group=CONSUMER_GROUP,
+                consumer=CONSUMER_NAME,
+                streams={k: ">" for k in known_streams},
+                count=50,
+            )
 
             if not messages:
                 time.sleep(1)
@@ -143,8 +184,6 @@ def run_subscriber():
                 stream_key = stream_key.decode() if isinstance(stream_key, bytes) else stream_key
                 if entries:
                     _process_entries(redis, stream_key, entries)
-                    # Advance cursor past last processed entry
-                    last_ids[stream_key] = entries[-1][0]
 
         except Exception as e:
             logger.error("Subscriber loop error: %s", e, exc_info=True)

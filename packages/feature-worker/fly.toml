@@ -10,8 +10,7 @@ primary_region = 'iad'
   dockerfile = 'Dockerfile'
 
 [env]
-  CONSUMER_GROUP = 'feature_group'
-  CONSUMER_NAME = 'feature_worker_1'
+  CONSUMER_GROUP = 'feature-worker-group'
   DLQ_KEY = 'metricade_dlq'
   ENVIRONMENT = 'production'
   FEATURE_STORE_KEY_PREFIX = 'metricade_features'
