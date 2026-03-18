@@ -10,8 +10,7 @@ primary_region = 'iad'
   dockerfile = 'Dockerfile'
 
 [env]
-  CONSUMER_GROUP = 'model_group'
-  CONSUMER_NAME = 'model_worker_1'
+  CONSUMER_GROUP = 'model-worker-group'
   ENVIRONMENT = 'production'
   FEATURES_STREAM_NAME = 'metricade_features_stream'
   FEATURE_STORE_KEY_PREFIX = 'metricade_features'
