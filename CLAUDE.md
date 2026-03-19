@@ -9,7 +9,7 @@ Browser (pixel.js)
   └─> Cloudflare Edge Worker (Hono)        POST /ingest → worker.metricade.com
           └─> Upstash Redis Streams          metricade_stream:{org_id}
                   └─> Feature Worker (Fly.io) accumulate → featurize → token merge (N=8) → store npz
-                          └─> Redis              metricade_features:{org_id}:{session_id} (24h TTL)
+                          └─> Redis              metricade_features:{org_id}:{session_id} (no TTL)
                           └─> Redis Stream       metricade_features_stream:{org_id} (pointer)
                                   └─> Model Worker (Fly.io)
                                           └─> Per-org BehavioralTransformer → 192-dim vector
@@ -81,8 +81,8 @@ fly secrets set \
 ```
 Fly config (`fly.toml`):
 - App: `metricade-feature-worker`, region: `iad`
-- VM: `shared-cpu-1x`, 512 MB RAM
-- Env vars (non-secret): `STREAM_NAME=metricade_stream`, `CONSUMER_GROUP=feature_group`, `CONSUMER_NAME=feature_worker_1`, `DLQ_KEY=metricade_dlq`, `FEATURES_STREAM_NAME=metricade_features_stream`, `FEATURE_STORE_KEY_PREFIX=metricade_features`
+- VM: `shared-cpu-1x`, 1024 MB RAM
+- Env vars (non-secret): `STREAM_NAME=metricade_stream`, `CONSUMER_GROUP=feature-worker-group`, `DLQ_KEY=metricade_dlq`, `FEATURES_STREAM_NAME=metricade_features_stream`, `FEATURE_STORE_KEY_PREFIX=metricade_features`
 
 ### model-worker (`packages/model-worker/`)
 ```bash
@@ -103,8 +103,8 @@ fly secrets set \
 ```
 Fly config (`fly.toml`):
 - App: `metricade-model-worker`, region: `iad`
-- VM: `shared-cpu-1x`, 512 MB RAM
-- Env vars (non-secret): `CONSUMER_GROUP=model_group`, `CONSUMER_NAME=model_worker_1`, `FEATURES_STREAM_NAME=metricade_features_stream`, `FEATURE_STORE_KEY_PREFIX=metricade_features`, `MODELS_DIR=/app/models`, `VECTOR_DIMS=192`, `SPOT_CHECK_RATE=0.01`
+- VM: `shared-cpu-1x`, 1024 MB RAM
+- Env vars (non-secret): `CONSUMER_GROUP=model-worker-group`, `FEATURES_STREAM_NAME=metricade_features_stream`, `FEATURE_STORE_KEY_PREFIX=metricade_features`, `MODELS_DIR=/app/models`, `VECTOR_DIMS=192`, `SPOT_CHECK_RATE=0.01`
 - Do **NOT** set `QDRANT_URL` in production — absence causes vector_client to default to Upstash Vector
 
 ### ~~vector-worker~~ (deprecated — scaled to zero, replaced by feature-worker + model-worker)
@@ -197,7 +197,7 @@ for v in r.json().get('result',{}).get('vectors',[]):
 - **Slack alerting** (`src/alerts/slack.ts`): `notifySlack(webhookUrl, message)` — called on Redis failure. Requires `SLACK_WEBHOOK_URL` secret.
 - Full enriched message serialized as a single `payload` JSON field in the stream entry
 
-### vector-worker (`packages/vector-worker/`)
+### ~~vector-worker~~ (`packages/vector-worker/`) — **DEPRECATED** (scaled to zero; replaced by feature-worker + model-worker)
 - Entry point: `src/main.py` — starts subscriber thread (`run_subscriber`) and HTTP health server (uvicorn on port 8080)
 - **Processing loop** (`src/subscriber.py`):
   1. `XREADGROUP` — consume new messages from all discovered `metricade_stream:{org_id}` streams
@@ -310,7 +310,7 @@ Total embedding output = 10+8+8+8+8+8+8+16 = **74 dims** (concatenated, broadcas
 | `metricade_sess:{org_id}:{session_id}` | String (JSON) | Accumulated event list for session, TTL 4h |
 | `metricade_new_sess:{org_id}:{session_id}` | String | Session dedup key for prior_session_count — SETNX on first flush, TTL 4h |
 | `metricade_client_sessions:{org_id}:{client_id}` | String (int) | Running count of sessions seen for this client_id — incremented on each new session, no TTL |
-| `metricade_features:{org_id}:{session_id}` | String (npz bytes) | Encoded feature tensors (cont [256×40] float32 + cat [8] int64), TTL 24h |
+| `metricade_features:{org_id}:{session_id}` | String (npz bytes) | Encoded feature tensors (cont [256×40] float32 + cat [8] int64), no TTL |
 | `metricade_features_stream:{org_id}` | Stream | Lightweight pointers consumed by model worker |
 
 ---
