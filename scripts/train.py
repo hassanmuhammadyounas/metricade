@@ -35,9 +35,10 @@ from tqdm import tqdm
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
-REPO_ROOT  = Path(__file__).resolve().parent.parent
-SCRIPTS_DIR = Path(__file__).resolve().parent
-MODELS_DIR = REPO_ROOT / "packages" / "model-worker" / "models"
+REPO_ROOT    = Path(__file__).resolve().parent.parent
+SCRIPTS_DIR  = Path(__file__).resolve().parent
+MODELS_DIR   = REPO_ROOT / "packages" / "model-worker" / "models"
+LOCAL_OUTPUT = SCRIPTS_DIR / "output" / "training"   # local copies of weights + logs
 
 # Make BehavioralTransformer importable by adding the model-worker package root
 sys.path.insert(0, str(REPO_ROOT / "packages" / "model-worker"))
@@ -450,6 +451,7 @@ def train_org(
 ) -> BehavioralTransformer:
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    LOCAL_OUTPUT.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"  Device: {device}")
 
@@ -569,6 +571,10 @@ def train_org(
             model_path = MODELS_DIR / f"{org_id}.pt"
             torch.save(transformer.state_dict(), model_path)
 
+            # Save local copy in scripts/output/training/
+            local_model_path = LOCAL_OUTPUT / f"{org_id}.pt"
+            torch.save(transformer.state_dict(), local_model_path)
+
             # Save full checkpoint for resuming
             torch.save(
                 {
@@ -581,7 +587,11 @@ def train_org(
                 },
                 checkpoint_path,
             )
-            print(f"  New best model saved (loss: {best_loss:.3f})")
+            print(
+                f"  New best model saved (loss: {best_loss:.3f})\n"
+                f"    → {model_path}\n"
+                f"    → {local_model_path}"
+            )
 
     return transformer
 
