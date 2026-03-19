@@ -4,12 +4,12 @@ Offline K-Means clustering analysis on session vectors from Upstash Vector.
 Usage:
     python scripts/cluster_analysis.py
 
-Environment variables required:
+Reads credentials from .env at the repo root (or from environment variables):
     UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN
     UPSTASH_VECTOR_URL, UPSTASH_VECTOR_TOKEN
 
 Dependencies:
-    pip install scikit-learn umap-learn matplotlib numpy httpx
+    pip install scikit-learn umap-learn matplotlib numpy httpx python-dotenv
 """
 
 import os
@@ -18,6 +18,21 @@ import random
 import httpx
 import numpy as np
 from collections import Counter
+from pathlib import Path
+
+# Load .env from repo root (two levels up from scripts/)
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+if _env_path.exists():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_env_path)
+    except ImportError:
+        # Fallback: manual parse if python-dotenv not installed
+        for line in _env_path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
