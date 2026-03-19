@@ -458,7 +458,7 @@ def train_org(
     collator = SimCLRCollator(dataset, args.crop_ratio, args.mask_ratio, args.reorder_ratio)
     loader   = DataLoader(
         collator,
-        batch_size=args.batch_size,
+        batch_size=256,
         shuffle=True,
         drop_last=True,
         num_workers=0,
@@ -467,8 +467,7 @@ def train_org(
     steps_per_epoch = len(loader)
     if steps_per_epoch == 0:
         raise ValueError(
-            f"Batch size {args.batch_size} is larger than dataset size {len(dataset)}. "
-            "Reduce --batch-size."
+            f"Dataset has fewer than 256 sessions — not enough for one full batch."
         )
 
     # Models
@@ -487,14 +486,14 @@ def train_org(
         head.load_state_dict(ckpt["head"])
         start_epoch = ckpt.get("epoch", 0)
         best_loss   = ckpt.get("best_loss", math.inf)
-        print(f"  Resuming from epoch {start_epoch}/{args.epochs} (loss: {best_loss:.3f})")
+        print(f"  Resuming from epoch {start_epoch}/{100} (loss: {best_loss:.3f})")
 
     optimizer = AdamW(
         list(transformer.parameters()) + list(head.parameters()),
         lr=args.lr,
         weight_decay=1e-4,
     )
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs * steps_per_epoch)
+    scheduler = CosineAnnealingLR(optimizer, T_max=100 * steps_per_epoch)
 
     if args.resume and checkpoint_path.exists():
         ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
@@ -503,7 +502,7 @@ def train_org(
 
     use_cuda = device.type == "cuda"
 
-    for epoch in range(start_epoch, args.epochs):
+    for epoch in range(start_epoch, 100):
         transformer.train()
         head.train()
 
@@ -540,13 +539,13 @@ def train_org(
             # ETA estimate based on step timing
             elapsed = time.time() - t_epoch_start
             steps_done = step + 1
-            steps_remaining = (args.epochs - epoch - 1) * steps_per_epoch + (steps_per_epoch - steps_done)
+            steps_remaining = (100 - epoch - 1) * steps_per_epoch + (steps_per_epoch - steps_done)
             time_per_step = elapsed / steps_done
             eta_s = int(steps_remaining * time_per_step)
             eta_str = f"{eta_s // 60}m {eta_s % 60}s"
 
             print(
-                f"\r  Epoch {epoch + 1}/{args.epochs} | "
+                f"\r  Epoch {epoch + 1}/{100} | "
                 f"Step {steps_done}/{steps_per_epoch} | "
                 f"Loss: {loss.item():.3f} | "
                 f"Pos: {pos_sim:.2f} | "
@@ -558,7 +557,7 @@ def train_org(
 
         epoch_loss = float(np.mean(epoch_losses))
         print(
-            f"\r  Epoch {epoch + 1}/{args.epochs} complete | "
+            f"\r  Epoch {epoch + 1}/{100} complete | "
             f"Avg loss: {epoch_loss:.3f} | "
             f"Steps: {steps_per_epoch}"
         )
@@ -595,8 +594,6 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--org",           type=str,   default=None,  help="Specific org_id to train (omit for all orgs)")
-    p.add_argument("--epochs",        type=int,   default=50,    help="Number of training epochs")
-    p.add_argument("--batch-size",    type=int,   default=64,    help="Batch size")
     p.add_argument("--lr",            type=float, default=3e-4,  help="Peak learning rate (AdamW)")
     p.add_argument("--temperature",   type=float, default=0.07,  help="NT-Xent temperature")
     p.add_argument("--min-sessions",  type=int,   default=200,   help="Minimum sessions required to train")
