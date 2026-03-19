@@ -50,4 +50,4 @@ Thumbs.db
 # Claude
 .claude/
 
-/scripts/output
+# scripts/output is intentionally NOT excluded — model weights must sync across devices
