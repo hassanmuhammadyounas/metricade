@@ -31,6 +31,10 @@ class UpstashRestClient:
     def get(self, key: str):
         return self._cmd("GET", key)
 
+    def set(self, key: str, value):
+        v = value.decode() if isinstance(value, bytes) else value
+        return self._cmd("SET", key, v)
+
     def setex(self, key: str, ttl: int, value):
         v = value.decode() if isinstance(value, bytes) else value
         return self._cmd("SETEX", key, ttl, v)

@@ -1,6 +1,6 @@
 """
 Stores featurized session tensors in Redis as npz bytes.
-Key: metricade_features:{org_id}:{session_id}  TTL: 24h
+Key: metricade_features:{org_id}:{session_id}  No TTL — persists indefinitely.
 Also publishes a lightweight pointer to metricade_features_stream:{org_id} for model worker consumption.
 
 Serialization format: numpy npz
@@ -13,7 +13,7 @@ import logging
 import numpy as np
 import redis as redis_lib
 
-from ..constants import FEATURE_STORE_KEY_PREFIX, FEATURES_STREAM_NAME, FEATURE_TTL_SECONDS
+from ..constants import FEATURE_STORE_KEY_PREFIX, FEATURES_STREAM_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def store_features(
     npz_bytes = buf.read()
 
     feature_key = f"{FEATURE_STORE_KEY_PREFIX}:{org_id}:{session_id}"
-    r.setex(feature_key, FEATURE_TTL_SECONDS, base64.b64encode(npz_bytes).decode())
+    r.set(feature_key, base64.b64encode(npz_bytes).decode())
 
     stream_key = f"{FEATURES_STREAM_NAME}:{org_id}"
     pointer = {
