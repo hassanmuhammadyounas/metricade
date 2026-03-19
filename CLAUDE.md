@@ -88,9 +88,18 @@ Fly config (`fly.toml`):
 ```bash
 cd packages/model-worker
 pip install -r requirements.txt
-# Generate bootstrap weights first (one-time, from repo root):
-python scripts/generate_bootstrap.py
 fly deploy --app metricade-model-worker
+```
+**Bootstrap weights** (`models/bootstrap_random.pt`) are committed to the repo — already generated with seed=42. If you ever need to regenerate them (e.g. after changing `BehavioralTransformer` architecture):
+```python
+# Run from repo root:
+import sys, os, torch
+sys.path.insert(0, "packages/model-worker")
+from src.inference.transformer import BehavioralTransformer
+torch.manual_seed(42)
+model = BehavioralTransformer()
+model.eval()
+torch.save(model.state_dict(), "packages/model-worker/models/bootstrap_random.pt")
 ```
 Secrets (set once, persist on Fly):
 ```bash
