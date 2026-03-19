@@ -1,0 +1,10 @@
+{
+  "org_id": "org_3bq2jCKKsVv6",
+  "k": 3,
+  "n_sessions": 2492,
+  "silhouette_cosine": 0.376442015171051,
+  "mean_inter_cluster_cosine_distance": 0.6272786060969034,
+  "net_separation": 0.41901356307914256,
+  "weights_path": "C:\\Users\\HMSYA 313\\Documents\\cursor\\metricade\\scripts\\output\\training\\org_3bq2jCKKsVv6.pt",
+  "env_path": "C:\\Users\\HMSYA 313\\Documents\\cursor\\metricade\\.env"
+}
