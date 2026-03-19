@@ -24,7 +24,6 @@ _features_stored: int = 0
 _queue_depth: int = 0
 _session_cache: dict[str, tuple[list, float]] = {}
 _SESSION_CACHE_TTL = 60
-_SESSION_EVENT_TTL = 4 * 3600
 
 
 def get_stats() -> dict:
@@ -70,7 +69,7 @@ def _accumulate_events(redis, org_id: str, session_id: str, new_events: list) ->
         existing = json.loads(existing_raw) if existing_raw else []
 
     merged = existing + new_events
-    redis.setex(key, _SESSION_EVENT_TTL, json.dumps(merged))
+    redis.set(key, json.dumps(merged))
     _session_cache[key] = (merged, now + _SESSION_CACHE_TTL)
     return merged
 

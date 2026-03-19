@@ -4,7 +4,7 @@ import { Env } from '../index';
  * Looks up the number of prior sessions for this client_id from Redis.
  * Key: metricade_client_sessions:{orgId}:{clientId}
  *
- * Uses a session-dedup key (SETNX metricade_new_sess:{orgId}:{sessionId}, TTL 4h)
+ * Uses a session-dedup key (SETNX metricade_new_sess:{orgId}:{sessionId}, no TTL)
  * to detect new sessions without double-counting repeated flushes.
  * INCR on client counter is fire-and-forget via ctx.waitUntil so it never
  * blocks the ingest response.
@@ -66,7 +66,7 @@ export async function enrichClientHistory(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify([
-        ['SET', sessKey, String(priorCount), 'NX', 'EX', '14400'],
+        ['SET', sessKey, String(priorCount), 'NX'],
         ['INCR', clientKey],
       ]),
     }).catch(() => {}),
