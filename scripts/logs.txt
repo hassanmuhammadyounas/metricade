@@ -1,278 +1,210 @@
-             
-   
+PS C:\Users\HMSYA 313\Documents\cursor\metricade\scripts> .\venv\Scripts\activate
+(venv) PS C:\Users\HMSYA 313\Documents\cursor\metricade\scripts> python train.py --org org_3bq2jCKKsVv6
+
 ============================================================
   Training org: org_3bq2jCKKsVv6
 ============================================================
   Device: cuda
 Scanning keys for org_3bq2jCKKsVv6...
-Loading sessions: 100%|██████████████████████████████████████████████████████████████████| 2491/2491 [00:51<00:00, 48.67session/s]
-Loaded 2,491 sessions for org_3bq2jCKKsVv6.
-  Epoch 1/100 complete | Avg loss: 3.562 | Steps: 9| Neg: 0.20 | ETA: 3m 9ss
-  New best model saved (loss: 3.562)
+Loading sessions: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7532/7532 [02:29<00:00, 50.40session/s]
+Loaded 7,532 sessions for org_3bq2jCKKsVv6.
+  Epoch 1/100 complete | Avg loss: 2.537 | Steps: 1177 | Neg: 0.02 | ETA: 10m 23s
+  New best model saved (loss: 2.537)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 2/100 complete | Avg loss: 3.460 | Steps: 9| Neg: 0.14 | ETA: 2m 33s
-  New best model saved (loss: 3.460)
+  Epoch 2/100 complete | Avg loss: 1.910 | Steps: 1174 | Neg: -0.00 | ETA: 9m 21s
+  New best model saved (loss: 1.910)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 3/100 complete | Avg loss: 3.447 | Steps: 9| Neg: 0.11 | ETA: 2m 30s
-  New best model saved (loss: 3.447)
+  Epoch 3/100 complete | Avg loss: 1.785 | Steps: 1176 | Neg: 0.01 | ETA: 9m 14s
+  New best model saved (loss: 1.785)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 4/100 complete | Avg loss: 3.442 | Steps: 9| Neg: 0.08 | ETA: 2m 31s
-  New best model saved (loss: 3.442)
+  Epoch 4/100 complete | Avg loss: 1.597 | Steps: 1179 | Neg: 0.01 | ETA: 9m 5s
+  New best model saved (loss: 1.597)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 5/100 complete | Avg loss: 3.404 | Steps: 9| Neg: 0.06 | ETA: 2m 28s
-  New best model saved (loss: 3.404)
+  Epoch 5/100 complete | Avg loss: 1.368 | Steps: 1179 | Neg: 0.00 | ETA: 9m 0s
+  New best model saved (loss: 1.368)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 6/100 complete | Avg loss: 3.260 | Steps: 9| Neg: 0.07 | ETA: 2m 24s
-  New best model saved (loss: 3.260)
+  Epoch 6/100 complete | Avg loss: 1.293 | Steps: 1179 | Neg: 0.01 | ETA: 8m 55ss
+  New best model saved (loss: 1.293)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 7/100 complete | Avg loss: 3.022 | Steps: 9| Neg: 0.07 | ETA: 2m 24s
-  New best model saved (loss: 3.022)
+  Epoch 7/100 complete | Avg loss: 1.233 | Steps: 1179 | Neg: -0.00 | ETA: 8m 50s
+  New best model saved (loss: 1.233)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 8/100 complete | Avg loss: 2.878 | Steps: 9| Neg: 0.04 | ETA: 2m 26s
-  New best model saved (loss: 2.878)
+  Epoch 8/100 complete | Avg loss: 1.195 | Steps: 1177 | Neg: 0.00 | ETA: 8m 43ss
+  New best model saved (loss: 1.195)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 9/100 complete | Avg loss: 2.805 | Steps: 9| Neg: 0.04 | ETA: 2m 22s
-  New best model saved (loss: 2.805)
+  Epoch 9/100 complete | Avg loss: 1.155 | Steps: 1179 | Neg: -0.00 | ETA: 8m 39s
+  New best model saved (loss: 1.155)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 10/100 complete | Avg loss: 2.780 | Steps: 9| Neg: 0.05 | ETA: 2m 18s
-  New best model saved (loss: 2.780)
+  Epoch 10/100 complete | Avg loss: 1.133 | Steps: 1171 | Neg: -0.00 | ETA: 8m 37s
+  New best model saved (loss: 1.133)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 11/100 complete | Avg loss: 2.780 | Steps: 9| Neg: 0.05 | ETA: 2m 18s
-  Epoch 12/100 complete | Avg loss: 2.724 | Steps: 9| Neg: 0.06 | ETA: 2m 16s
-  New best model saved (loss: 2.724)
+  Epoch 11/100 complete | Avg loss: 1.136 | Steps: 1178 | Neg: 0.00 | ETA: 8m 30ss
+  Epoch 12/100 complete | Avg loss: 1.114 | Steps: 1170 | Neg: -0.00 | ETA: 8m 24s
+  New best model saved (loss: 1.114)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 13/100 complete | Avg loss: 2.706 | Steps: 9| Neg: 0.05 | ETA: 2m 16s
-  New best model saved (loss: 2.706)
+  Epoch 13/100 complete | Avg loss: 1.099 | Steps: 1179 | Neg: 0.01 | ETA: 8m 20ss
+  New best model saved (loss: 1.099)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 14/100 complete | Avg loss: 2.717 | Steps: 9| Neg: 0.04 | ETA: 2m 14s
-  Epoch 15/100 complete | Avg loss: 2.700 | Steps: 9| Neg: 0.05 | ETA: 2m 13s
-  New best model saved (loss: 2.700)
+  Epoch 14/100 complete | Avg loss: 1.065 | Steps: 1178 | Neg: 0.00 | ETA: 8m 11ss
+  New best model saved (loss: 1.065)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 16/100 complete | Avg loss: 2.711 | Steps: 9| Neg: 0.05 | ETA: 2m 11s
-  Epoch 17/100 complete | Avg loss: 2.667 | Steps: 9| Neg: 0.06 | ETA: 2m 10s
-  New best model saved (loss: 2.667)
+  Epoch 15/100 complete | Avg loss: 1.063 | Steps: 1177 | Neg: 0.01 | ETA: 8m 5ss
+  New best model saved (loss: 1.063)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 18/100 complete | Avg loss: 2.643 | Steps: 9| Neg: 0.06 | ETA: 2m 11s
-  New best model saved (loss: 2.643)
+  Epoch 16/100 complete | Avg loss: 1.037 | Steps: 1170 | Neg: -0.00 | ETA: 7m 58s
+  New best model saved (loss: 1.037)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 19/100 complete | Avg loss: 2.651 | Steps: 9| Neg: 0.06 | ETA: 2m 6s
-  Epoch 20/100 complete | Avg loss: 2.606 | Steps: 9| Neg: 0.05 | ETA: 2m 4s
-  New best model saved (loss: 2.606)
+  Epoch 17/100 complete | Avg loss: 1.058 | Steps: 1177 | Neg: 0.00 | ETA: 7m 57ss
+  Epoch 18/100 complete | Avg loss: 1.036 | Steps: 1179 | Neg: -0.00 | ETA: 7m 49s
+  New best model saved (loss: 1.036)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 21/100 complete | Avg loss: 2.597 | Steps: 9| Neg: 0.04 | ETA: 2m 4s
-  New best model saved (loss: 2.597)
+  Epoch 19/100 complete | Avg loss: 1.049 | Steps: 1179 | Neg: -0.00 | ETA: 7m 41s
+  Epoch 20/100 complete | Avg loss: 1.022 | Steps: 1177 | Neg: 0.00 | ETA: 7m 37ss
+  New best model saved (loss: 1.022)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 22/100 complete | Avg loss: 2.547 | Steps: 9| Neg: 0.05 | ETA: 2m 1s
-  New best model saved (loss: 2.547)
+  Epoch 21/100 complete | Avg loss: 1.050 | Steps: 1170 | Neg: -0.00 | ETA: 7m 33s
+  Epoch 22/100 complete | Avg loss: 1.046 | Steps: 1179 | Neg: 0.00 | ETA: 7m 26ss
+  Epoch 23/100 complete | Avg loss: 1.044 | Steps: 1177 | Neg: -0.00 | ETA: 7m 23s
+  Epoch 24/100 complete | Avg loss: 1.075 | Steps: 1171 | Neg: 0.00 | ETA: 7m 18ss
+  Epoch 25/100 complete | Avg loss: 1.082 | Steps: 1179 | Neg: 0.01 | ETA: 7m 11ss
+  Epoch 26/100 complete | Avg loss: 1.057 | Steps: 1179 | Neg: 0.01 | ETA: 7m 4ss
+  Epoch 27/100 complete | Avg loss: 1.069 | Steps: 1177 | Neg: 0.01 | ETA: 6m 57ss
+  Epoch 28/100 complete | Avg loss: 1.070 | Steps: 1179 | Neg: 0.00 | ETA: 6m 51ss
+  Epoch 29/100 complete | Avg loss: 1.075 | Steps: 1179 | Neg: -0.00 | ETA: 6m 45s
+  Epoch 30/100 complete | Avg loss: 1.060 | Steps: 1177 | Neg: 0.00 | ETA: 6m 39ss
+  Epoch 31/100 complete | Avg loss: 1.063 | Steps: 1175 | Neg: 0.00 | ETA: 6m 35ss
+  Epoch 32/100 complete | Avg loss: 1.066 | Steps: 1170 | Neg: 0.00 | ETA: 6m 30ss
+  Epoch 33/100 complete | Avg loss: 1.068 | Steps: 1178 | Neg: 0.01 | ETA: 6m 24ss
+  Epoch 34/100 complete | Avg loss: 1.070 | Steps: 1170 | Neg: -0.00 | ETA: 6m 17s
+  Epoch 35/100 complete | Avg loss: 1.072 | Steps: 1170 | Neg: -0.00 | ETA: 6m 13s
+  Epoch 36/100 complete | Avg loss: 1.072 | Steps: 1176 | Neg: 0.00 | ETA: 6m 5ss
+  Epoch 37/100 complete | Avg loss: 1.074 | Steps: 1176 | Neg: -0.00 | ETA: 6m 0s
+  Epoch 38/100 complete | Avg loss: 1.057 | Steps: 1179 | Neg: 0.00 | ETA: 5m 56ss
+  Epoch 39/100 complete | Avg loss: 1.051 | Steps: 1178 | Neg: 0.01 | ETA: 5m 49ss
+  Epoch 40/100 complete | Avg loss: 1.027 | Steps: 1178 | Neg: -0.01 | ETA: 5m 42s
+  Epoch 41/100 complete | Avg loss: 1.056 | Steps: 1178 | Neg: -0.00 | ETA: 5m 35s
+  Epoch 42/100 complete | Avg loss: 1.057 | Steps: 1177 | Neg: -0.00 | ETA: 5m 30s
+  Epoch 43/100 complete | Avg loss: 1.071 | Steps: 1177 | Neg: -0.01 | ETA: 5m 23s
+  Epoch 44/100 complete | Avg loss: 1.044 | Steps: 1178 | Neg: -0.00 | ETA: 5m 18s
+  Epoch 45/100 complete | Avg loss: 1.052 | Steps: 1176 | Neg: 0.00 | ETA: 5m 11ss
+  Epoch 46/100 complete | Avg loss: 1.061 | Steps: 1174 | Neg: -0.00 | ETA: 5m 6s
+  Epoch 47/100 complete | Avg loss: 1.056 | Steps: 1175 | Neg: 0.01 | ETA: 5m 1ss
+  Epoch 48/100 complete | Avg loss: 1.044 | Steps: 1175 | Neg: 0.00 | ETA: 4m 55ss
+  Epoch 49/100 complete | Avg loss: 1.069 | Steps: 1175 | Neg: -0.00 | ETA: 4m 53s
+  Epoch 50/100 complete | Avg loss: 1.065 | Steps: 1177 | Neg: -0.00 | ETA: 4m 50s
+  Epoch 51/100 complete | Avg loss: 1.065 | Steps: 1177 | Neg: 0.01 | ETA: 4m 43ss
+  Epoch 52/100 complete | Avg loss: 1.044 | Steps: 1178 | Neg: -0.00 | ETA: 4m 38s
+  Epoch 53/100 complete | Avg loss: 1.061 | Steps: 1175 | Neg: -0.00 | ETA: 4m 30s
+  Epoch 54/100 complete | Avg loss: 1.051 | Steps: 1179 | Neg: -0.00 | ETA: 4m 21s
+  Epoch 55/100 complete | Avg loss: 1.072 | Steps: 1178 | Neg: -0.00 | ETA: 4m 17s
+  Epoch 56/100 complete | Avg loss: 1.052 | Steps: 1177 | Neg: 0.00 | ETA: 4m 10ss
+  Epoch 57/100 complete | Avg loss: 1.041 | Steps: 1177 | Neg: -0.00 | ETA: 4m 6s
+  Epoch 58/100 complete | Avg loss: 1.035 | Steps: 1178 | Neg: -0.01 | ETA: 4m 0s
+  Epoch 59/100 complete | Avg loss: 1.037 | Steps: 1177 | Neg: -0.00 | ETA: 3m 53s
+  Epoch 60/100 complete | Avg loss: 1.044 | Steps: 1177 | Neg: -0.00 | ETA: 3m 47s
+  Epoch 61/100 complete | Avg loss: 1.041 | Steps: 1177 | Neg: -0.00 | ETA: 3m 42s
+  Epoch 62/100 complete | Avg loss: 1.057 | Steps: 1173 | Neg: 0.01 | ETA: 3m 36ss
+  Epoch 63/100 complete | Avg loss: 1.055 | Steps: 1178 | Neg: -0.01 | ETA: 3m 34s
+  Epoch 64/100 complete | Avg loss: 1.050 | Steps: 1178 | Neg: -0.00 | ETA: 3m 28s
+  Epoch 65/100 complete | Avg loss: 1.039 | Steps: 1178 | Neg: -0.01 | ETA: 3m 22s
+  Epoch 66/100 complete | Avg loss: 1.032 | Steps: 1179 | Neg: 0.01 | ETA: 3m 17ss
+  Epoch 67/100 complete | Avg loss: 1.051 | Steps: 1178 | Neg: -0.00 | ETA: 3m 12s
+  Epoch 68/100 complete | Avg loss: 1.036 | Steps: 1177 | Neg: -0.00 | ETA: 3m 7s
+  Epoch 69/100 complete | Avg loss: 1.016 | Steps: 1177 | Neg: -0.00 | ETA: 3m 2s
+  New best model saved (loss: 1.016)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 23/100 complete | Avg loss: 2.526 | Steps: 9| Neg: 0.04 | ETA: 2m 0s
-  New best model saved (loss: 2.526)
+  Epoch 70/100 complete | Avg loss: 1.022 | Steps: 1170 | Neg: -0.01 | ETA: 2m 56s
+  Epoch 71/100 complete | Avg loss: 1.033 | Steps: 1179 | Neg: 0.00 | ETA: 2m 46ss
+  Epoch 72/100 complete | Avg loss: 1.046 | Steps: 1179 | Neg: 0.00 | ETA: 2m 39ss
+  Epoch 73/100 complete | Avg loss: 1.040 | Steps: 1177 | Neg: 0.00 | ETA: 2m 33ss
+  Epoch 74/100 complete | Avg loss: 1.026 | Steps: 1177 | Neg: -0.00 | ETA: 2m 27s
+  Epoch 75/100 complete | Avg loss: 1.028 | Steps: 1178 | Neg: -0.00 | ETA: 2m 23s
+  Epoch 76/100 complete | Avg loss: 1.009 | Steps: 1174 | Neg: 0.00 | ETA: 2m 18ss
+  New best model saved (loss: 1.009)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 24/100 complete | Avg loss: 2.465 | Steps: 9| Neg: 0.03 | ETA: 1m 59s
-  New best model saved (loss: 2.465)
+  Epoch 77/100 complete | Avg loss: 1.031 | Steps: 1178 | Neg: 0.00 | ETA: 2m 12ss
+  Epoch 78/100 complete | Avg loss: 1.004 | Steps: 1179 | Neg: -0.00 | ETA: 2m 6s
+  New best model saved (loss: 1.004)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 25/100 complete | Avg loss: 2.465 | Steps: 9| Neg: 0.04 | ETA: 1m 56s
-  New best model saved (loss: 2.465)
+  Epoch 79/100 complete | Avg loss: 1.005 | Steps: 1171 | Neg: -0.01 | ETA: 2m 1s
+  Epoch 80/100 complete | Avg loss: 1.009 | Steps: 1171 | Neg: -0.00 | ETA: 1m 53s
+  Epoch 81/100 complete | Avg loss: 1.007 | Steps: 1177 | Neg: 0.00 | ETA: 1m 48ss
+  Epoch 82/100 complete | Avg loss: 1.010 | Steps: 1179 | Neg: -0.00 | ETA: 1m 42s
+  Epoch 83/100 complete | Avg loss: 0.998 | Steps: 1176 | Neg: -0.01 | ETA: 1m 36s
+  New best model saved (loss: 0.998)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 26/100 complete | Avg loss: 2.445 | Steps: 9| Neg: 0.05 | ETA: 1m 56s
-  New best model saved (loss: 2.445)
+  Epoch 84/100 complete | Avg loss: 1.002 | Steps: 1171 | Neg: -0.01 | ETA: 1m 31s
+  Epoch 85/100 complete | Avg loss: 1.012 | Steps: 1177 | Neg: 0.01 | ETA: 1m 25ss
+  Epoch 86/100 complete | Avg loss: 1.004 | Steps: 1170 | Neg: -0.00 | ETA: 1m 20s
+  Epoch 87/100 complete | Avg loss: 0.992 | Steps: 1179 | Neg: -0.00 | ETA: 1m 14s
+  New best model saved (loss: 0.992)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 27/100 complete | Avg loss: 2.407 | Steps: 9| Neg: 0.05 | ETA: 1m 57s
-  New best model saved (loss: 2.407)
+  Epoch 88/100 complete | Avg loss: 0.992 | Steps: 1178 | Neg: 0.00 | ETA: 1m 8ss
+  New best model saved (loss: 0.992)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 28/100 complete | Avg loss: 2.389 | Steps: 9| Neg: 0.06 | ETA: 1m 53s
-  New best model saved (loss: 2.389)
+  Epoch 89/100 complete | Avg loss: 0.990 | Steps: 1179 | Neg: -0.00 | ETA: 1m 3s
+  New best model saved (loss: 0.990)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 29/100 complete | Avg loss: 2.340 | Steps: 9| Neg: 0.06 | ETA: 1m 50s
-  New best model saved (loss: 2.340)
+  Epoch 90/100 complete | Avg loss: 1.003 | Steps: 1179 | Neg: -0.00 | ETA: 0m 57s
+  Epoch 91/100 complete | Avg loss: 0.988 | Steps: 1179 | Neg: -0.01 | ETA: 0m 51s
+  New best model saved (loss: 0.988)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 30/100 complete | Avg loss: 2.288 | Steps: 9| Neg: 0.06 | ETA: 1m 49s
-  New best model saved (loss: 2.288)
+  Epoch 92/100 complete | Avg loss: 1.001 | Steps: 1170 | Neg: -0.00 | ETA: 0m 45s
+  Epoch 93/100 complete | Avg loss: 0.992 | Steps: 1170 | Neg: -0.00 | ETA: 0m 40s
+  Epoch 94/100 complete | Avg loss: 1.000 | Steps: 1178 | Neg: -0.00 | ETA: 0m 34s
+  Epoch 95/100 complete | Avg loss: 0.986 | Steps: 1174 | Neg: -0.00 | ETA: 0m 28s
+  New best model saved (loss: 0.986)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 31/100 complete | Avg loss: 2.249 | Steps: 9| Neg: 0.05 | ETA: 1m 48s
-  New best model saved (loss: 2.249)
+  Epoch 96/100 complete | Avg loss: 0.988 | Steps: 1179 | Neg: -0.00 | ETA: 0m 23s
+  Epoch 97/100 complete | Avg loss: 0.997 | Steps: 1177 | Neg: -0.00 | ETA: 0m 17s
+  Epoch 98/100 complete | Avg loss: 0.995 | Steps: 1178 | Neg: -0.00 | ETA: 0m 11s
+  Epoch 99/100 complete | Avg loss: 0.984 | Steps: 1178 | Neg: -0.00 | ETA: 0m 5s
+  New best model saved (loss: 0.984)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 32/100 complete | Avg loss: 2.225 | Steps: 9| Neg: 0.05 | ETA: 1m 45s
-  New best model saved (loss: 2.225)
+  Epoch 100/100 complete | Avg loss: 0.977 | Steps: 1179 | Neg: -0.01 | ETA: 0m 0s
+  New best model saved (loss: 0.977)
     → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
     → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 33/100 complete | Avg loss: 2.133 | Steps: 9| Neg: 0.05 | ETA: 1m 44s
-  New best model saved (loss: 2.133)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 34/100 complete | Avg loss: 2.102 | Steps: 9| Neg: 0.04 | ETA: 1m 43s
-  New best model saved (loss: 2.102)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 35/100 complete | Avg loss: 2.058 | Steps: 9| Neg: 0.04 | ETA: 1m 41s
-  New best model saved (loss: 2.058)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 36/100 complete | Avg loss: 1.956 | Steps: 9| Neg: 0.03 | ETA: 1m 40s
-  New best model saved (loss: 1.956)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 37/100 complete | Avg loss: 1.947 | Steps: 9| Neg: 0.04 | ETA: 1m 39s
-  New best model saved (loss: 1.947)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 38/100 complete | Avg loss: 1.885 | Steps: 9| Neg: 0.03 | ETA: 1m 37s
-  New best model saved (loss: 1.885)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 39/100 complete | Avg loss: 1.934 | Steps: 9| Neg: 0.04 | ETA: 1m 35s
-  Epoch 40/100 complete | Avg loss: 1.910 | Steps: 9| Neg: 0.04 | ETA: 1m 33s
-  Epoch 41/100 complete | Avg loss: 1.860 | Steps: 9| Neg: 0.04 | ETA: 1m 32s
-  New best model saved (loss: 1.860)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 42/100 complete | Avg loss: 1.845 | Steps: 9| Neg: 0.03 | ETA: 1m 30s
-  New best model saved (loss: 1.845)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 43/100 complete | Avg loss: 1.848 | Steps: 9| Neg: 0.04 | ETA: 1m 29s
-  Epoch 44/100 complete | Avg loss: 1.801 | Steps: 9| Neg: 0.04 | ETA: 1m 27s
-  New best model saved (loss: 1.801)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 45/100 complete | Avg loss: 1.840 | Steps: 9| Neg: 0.04 | ETA: 1m 26s
-  Epoch 46/100 complete | Avg loss: 1.801 | Steps: 9| Neg: 0.04 | ETA: 1m 24s
-  New best model saved (loss: 1.801)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 47/100 complete | Avg loss: 1.787 | Steps: 9| Neg: 0.04 | ETA: 1m 25s
-  New best model saved (loss: 1.787)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 48/100 complete | Avg loss: 1.780 | Steps: 9| Neg: 0.04 | ETA: 1m 21s
-  New best model saved (loss: 1.780)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 49/100 complete | Avg loss: 1.811 | Steps: 9| Neg: 0.04 | ETA: 1m 20s
-  Epoch 50/100 complete | Avg loss: 1.743 | Steps: 9| Neg: 0.04 | ETA: 1m 20s
-  New best model saved (loss: 1.743)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 51/100 complete | Avg loss: 1.711 | Steps: 9| Neg: 0.03 | ETA: 1m 18s
-  New best model saved (loss: 1.711)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 52/100 complete | Avg loss: 1.714 | Steps: 9| Neg: 0.03 | ETA: 1m 15s
-  Epoch 53/100 complete | Avg loss: 1.757 | Steps: 9| Neg: 0.04 | ETA: 1m 14s
-  Epoch 54/100 complete | Avg loss: 1.768 | Steps: 9| Neg: 0.04 | ETA: 1m 15s
-  Epoch 55/100 complete | Avg loss: 1.717 | Steps: 9| Neg: 0.03 | ETA: 1m 11s
-  Epoch 56/100 complete | Avg loss: 1.705 | Steps: 9| Neg: 0.04 | ETA: 1m 9ss
-  New best model saved (loss: 1.705)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 57/100 complete | Avg loss: 1.719 | Steps: 9| Neg: 0.04 | ETA: 1m 8s
-  Epoch 58/100 complete | Avg loss: 1.679 | Steps: 9| Neg: 0.04 | ETA: 1m 6ss
-  New best model saved (loss: 1.679)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 59/100 complete | Avg loss: 1.610 | Steps: 9| Neg: 0.03 | ETA: 1m 4s
-  New best model saved (loss: 1.610)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 60/100 complete | Avg loss: 1.714 | Steps: 9| Neg: 0.04 | ETA: 1m 3s
-  Epoch 61/100 complete | Avg loss: 1.672 | Steps: 9| Neg: 0.04 | ETA: 1m 2s
-  Epoch 62/100 complete | Avg loss: 1.676 | Steps: 9| Neg: 0.03 | ETA: 0m 59s
-  Epoch 63/100 complete | Avg loss: 1.675 | Steps: 9| Neg: 0.03 | ETA: 0m 58s
-  Epoch 64/100 complete | Avg loss: 1.631 | Steps: 9| Neg: 0.04 | ETA: 0m 57s
-  Epoch 65/100 complete | Avg loss: 1.641 | Steps: 9| Neg: 0.04 | ETA: 0m 55s
-  Epoch 66/100 complete | Avg loss: 1.651 | Steps: 9| Neg: 0.03 | ETA: 0m 52s
-  Epoch 67/100 complete | Avg loss: 1.651 | Steps: 9| Neg: 0.03 | ETA: 0m 50s
-  Epoch 68/100 complete | Avg loss: 1.656 | Steps: 9| Neg: 0.03 | ETA: 0m 49s
-  Epoch 69/100 complete | Avg loss: 1.668 | Steps: 9| Neg: 0.04 | ETA: 0m 48s
-  Epoch 70/100 complete | Avg loss: 1.604 | Steps: 9| Neg: 0.04 | ETA: 0m 48s
-  New best model saved (loss: 1.604)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 71/100 complete | Avg loss: 1.631 | Steps: 9| Neg: 0.03 | ETA: 0m 46s
-  Epoch 72/100 complete | Avg loss: 1.674 | Steps: 9| Neg: 0.03 | ETA: 0m 44s
-  Epoch 73/100 complete | Avg loss: 1.611 | Steps: 9| Neg: 0.03 | ETA: 0m 43s
-  Epoch 74/100 complete | Avg loss: 1.633 | Steps: 9| Neg: 0.03 | ETA: 0m 41s
-  Epoch 75/100 complete | Avg loss: 1.624 | Steps: 9| Neg: 0.03 | ETA: 0m 40s
-  Epoch 76/100 complete | Avg loss: 1.600 | Steps: 9| Neg: 0.03 | ETA: 0m 37s
-  New best model saved (loss: 1.600)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 77/100 complete | Avg loss: 1.628 | Steps: 9| Neg: 0.03 | ETA: 0m 35s
-  Epoch 78/100 complete | Avg loss: 1.590 | Steps: 9| Neg: 0.03 | ETA: 0m 34s
-  New best model saved (loss: 1.590)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 79/100 complete | Avg loss: 1.607 | Steps: 9| Neg: 0.03 | ETA: 0m 32s
-  Epoch 80/100 complete | Avg loss: 1.632 | Steps: 9| Neg: 0.03 | ETA: 0m 31s
-  Epoch 81/100 complete | Avg loss: 1.621 | Steps: 9| Neg: 0.03 | ETA: 0m 29s
-  Epoch 82/100 complete | Avg loss: 1.630 | Steps: 9| Neg: 0.03 | ETA: 0m 27s
-  Epoch 83/100 complete | Avg loss: 1.606 | Steps: 9| Neg: 0.03 | ETA: 0m 26s
-  Epoch 84/100 complete | Avg loss: 1.605 | Steps: 9| Neg: 0.03 | ETA: 0m 24s
-  Epoch 85/100 complete | Avg loss: 1.589 | Steps: 9| Neg: 0.03 | ETA: 0m 22s
-  New best model saved (loss: 1.589)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 86/100 complete | Avg loss: 1.609 | Steps: 9| Neg: 0.03 | ETA: 0m 22s
-  Epoch 87/100 complete | Avg loss: 1.646 | Steps: 9| Neg: 0.03 | ETA: 0m 20s
-  Epoch 88/100 complete | Avg loss: 1.593 | Steps: 9| Neg: 0.03 | ETA: 0m 18s
-  Epoch 89/100 complete | Avg loss: 1.574 | Steps: 9| Neg: 0.03 | ETA: 0m 16s
-  New best model saved (loss: 1.574)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 90/100 complete | Avg loss: 1.618 | Steps: 9| Neg: 0.03 | ETA: 0m 15s
-  Epoch 91/100 complete | Avg loss: 1.613 | Steps: 9| Neg: 0.03 | ETA: 0m 14s
-  Epoch 92/100 complete | Avg loss: 1.572 | Steps: 9| Neg: 0.03 | ETA: 0m 12s
-  New best model saved (loss: 1.572)
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\packages\model-worker\models\org_3bq2jCKKsVv6.pt
-    → C:\Users\HMSYA 313\Documents\cursor\metricade\scripts\output\training\org_3bq2jCKKsVv6.pt
-  Epoch 93/100 complete | Avg loss: 1.614 | Steps: 9| Neg: 0.03 | ETA: 0m 10s
-  Epoch 94/100 complete | Avg loss: 1.582 | Steps: 9| Neg: 0.03 | ETA: 0m 9ss
-  Epoch 95/100 complete | Avg loss: 1.604 | Steps: 9| Neg: 0.03 | ETA: 0m 7s
-  Epoch 96/100 complete | Avg loss: 1.613 | Steps: 9| Neg: 0.03 | ETA: 0m 6s
-  Epoch 97/100 complete | Avg loss: 1.601 | Steps: 9| Neg: 0.03 | ETA: 0m 4s
-  Epoch 98/100 complete | Avg loss: 1.601 | Steps: 9| Neg: 0.03 | ETA: 0m 3s
-  Epoch 99/100 complete | Avg loss: 1.629 | Steps: 9| Neg: 0.04 | ETA: 0m 1s
-  Epoch 100/100 complete | Avg loss: 1.634 | Steps: 9| Neg: 0.03 | ETA: 0m 0s
 Scanning keys for org_3bq2jCKKsVv6...
-Loading sessions: 100%|█████████████████████████████████████████████████████████████████████| 2491/2491 [00:48<00:00, 51.23session/s]
-Loaded 2,491 sessions for org_3bq2jCKKsVv6.
+Loading sessions: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7534/7534 [02:31<00:00, 49.87session/s]
+Loaded 7,534 sessions for org_3bq2jCKKsVv6.
 
   Running post-training validation...
 
-  Post-Training Validation (2,491 sessions)
+  Post-Training Validation (7,534 sessions)
   ==============================================
   Metric                        Trained  Bootstrap
   ----------------------------------------------
-  Silhouette score (cosine)       0.376      0.545
-  Net separation                  0.421      0.324
-  Delta (trained - bootstrap)    -0.168     +0.097
+  Silhouette score (cosine)       0.333      0.551
+  Net separation                  0.534      0.327
+  Delta (trained - bootstrap)    -0.218     +0.207
   ==============================================
   Silhouette looks healthy (>0.30).
 
