@@ -1,7 +1,7 @@
 """
 Offline contrastive training for BehavioralTransformer.
 
-Uses SimCLR with CL4SRec-style augmentations (crop / mask / reorder) on behavioral
+Uses SimCLR with augmentations (crop / mask / noise) on behavioral
 event sequences fetched from Upstash Redis feature keys.
 
 Usage:
@@ -176,18 +176,13 @@ def aug_mask(cont: torch.Tensor, ratio: float = 0.2) -> torch.Tensor:
     return result
 
 
-def aug_reorder(cont: torch.Tensor, ratio: float = 0.2) -> torch.Tensor:
-    """Shuffle a random contiguous window of event rows."""
+def aug_noise(cont: torch.Tensor, std: float = 0.02) -> torch.Tensor:
+    """Add Gaussian noise to real event rows (preserves temporal structure)."""
     real_len = _real_len(cont)
     if real_len == 0:
         return cont
-    window_len = max(2, int(real_len * ratio))
-    if window_len > real_len:
-        window_len = real_len
-    start = random.randint(0, real_len - window_len)
     result = cont.clone()
-    perm = torch.randperm(window_len)
-    result[start : start + window_len] = cont[start : start + window_len][perm]
+    result[:real_len] = result[:real_len] + torch.randn(real_len, cont.shape[1]) * std
     return result
 
 
@@ -195,18 +190,17 @@ def augment(
     cont: torch.Tensor,
     crop_ratio: float,
     mask_ratio: float,
-    reorder_ratio: float,
+    noise_std: float,
 ) -> torch.Tensor:
-    """Apply two randomly sampled augmentations sequentially."""
+    """Apply two randomly sampled augmentations sequentially (without replacement)."""
     aug_fns = [
-        (aug_crop,    crop_ratio),
-        (aug_mask,    mask_ratio),
-        (aug_reorder, reorder_ratio),
+        (aug_crop,  crop_ratio),
+        (aug_mask,  mask_ratio),
+        (aug_noise, noise_std),
     ]
-    # Uniform weights — sample 2 with replacement
-    chosen = random.choices(aug_fns, k=2)
-    for fn, ratio in chosen:
-        cont = fn(cont, ratio)
+    chosen = random.sample(aug_fns, k=2)
+    for fn, param in chosen:
+        cont = fn(cont, param)
     return cont
 
 
@@ -215,7 +209,7 @@ def augment(
 class SimCLRCollator(Dataset):
     """
     Wraps MetricadeSessionDataset to produce two augmented views per session.
-    Returns (va_cont, cat, vb_cont, cat) — cat is not augmented.
+    Returns (va_cont, cat_a, vb_cont, cat_b) — each view has independent cat UNK dropout.
     """
 
     def __init__(
@@ -223,21 +217,26 @@ class SimCLRCollator(Dataset):
         dataset: MetricadeSessionDataset,
         crop_ratio: float,
         mask_ratio: float,
-        reorder_ratio: float,
+        noise_std: float,
     ):
         self.dataset = dataset
         self.crop_ratio = crop_ratio
         self.mask_ratio = mask_ratio
-        self.reorder_ratio = reorder_ratio
+        self.noise_std = noise_std
 
     def __len__(self) -> int:
         return len(self.dataset)
 
     def __getitem__(self, idx: int):
         cont, cat = self.dataset[idx]
-        va = augment(cont, self.crop_ratio, self.mask_ratio, self.reorder_ratio)
-        vb = augment(cont, self.crop_ratio, self.mask_ratio, self.reorder_ratio)
-        return va, cat, vb, cat
+        va = augment(cont, self.crop_ratio, self.mask_ratio, self.noise_std)
+        vb = augment(cont, self.crop_ratio, self.mask_ratio, self.noise_std)
+        # Cat UNK dropout: zero one random categorical index per view independently
+        cat_a = cat.clone()
+        cat_b = cat.clone()
+        cat_a[random.randint(0, cat.shape[0] - 1)] = 0
+        cat_b[random.randint(0, cat.shape[0] - 1)] = 0
+        return va, cat_a, vb, cat_b
 
 
 # ── Projection head ────────────────────────────────────────────────────────────
@@ -457,10 +456,10 @@ def train_org(
 
     # Dataset and collator
     dataset  = MetricadeSessionDataset(org_id, redis_url, redis_token, args.min_sessions)
-    collator = SimCLRCollator(dataset, args.crop_ratio, args.mask_ratio, args.reorder_ratio)
+    collator = SimCLRCollator(dataset, args.crop_ratio, args.mask_ratio, args.noise_std)
     loader   = DataLoader(
         collator,
-        batch_size=256,
+        batch_size=64,
         shuffle=True,
         drop_last=True,
         num_workers=0,
@@ -469,7 +468,7 @@ def train_org(
     steps_per_epoch = len(loader)
     if steps_per_epoch == 0:
         raise ValueError(
-            f"Dataset has fewer than 256 sessions — not enough for one full batch."
+            f"Dataset has fewer than 64 sessions — not enough for one full batch."
         )
 
     # Models
@@ -511,21 +510,22 @@ def train_org(
         epoch_losses: list[float] = []
         t_epoch_start = time.time()
 
-        for step, (va_cont, cat, vb_cont, _) in enumerate(loader):
+        for step, (va_cont, cat_a, vb_cont, cat_b) in enumerate(loader):
             t_step_start = time.time()
 
             va_cont = va_cont.to(device)
             vb_cont = vb_cont.to(device)
-            cat     = cat.to(device)
+            cat_a   = cat_a.to(device)
+            cat_b   = cat_b.to(device)
 
             if use_cuda:
                 with torch.autocast("cuda"):
-                    z_a = head(transformer(va_cont, cat))
-                    z_b = head(transformer(vb_cont, cat))
+                    z_a = head(transformer(va_cont, cat_a))
+                    z_b = head(transformer(vb_cont, cat_b))
                     loss, pos_sim, neg_sim = criterion(z_a, z_b)
             else:
-                z_a = head(transformer(va_cont, cat))
-                z_b = head(transformer(vb_cont, cat))
+                z_a = head(transformer(va_cont, cat_a))
+                z_b = head(transformer(vb_cont, cat_b))
                 loss, pos_sim, neg_sim = criterion(z_a, z_b)
 
             optimizer.zero_grad()
@@ -605,11 +605,11 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--org",           type=str,   default=None,  help="Specific org_id to train (omit for all orgs)")
     p.add_argument("--lr",            type=float, default=3e-4,  help="Peak learning rate (AdamW)")
-    p.add_argument("--temperature",   type=float, default=0.07,  help="NT-Xent temperature")
+    p.add_argument("--temperature",   type=float, default=0.125, help="NT-Xent temperature (1/sqrt(proj_dim)=0.125 for dim=64)")
     p.add_argument("--min-sessions",  type=int,   default=200,   help="Minimum sessions required to train")
     p.add_argument("--crop-ratio",    type=float, default=0.7,   help="Fraction of sequence kept by crop augmentation")
-    p.add_argument("--mask-ratio",    type=float, default=0.2,   help="Fraction of events zeroed by mask augmentation")
-    p.add_argument("--reorder-ratio", type=float, default=0.2,   help="Fraction of sequence shuffled by reorder augmentation")
+    p.add_argument("--mask-ratio",    type=float, default=0.1,   help="Fraction of events zeroed by mask augmentation")
+    p.add_argument("--noise-std",     type=float, default=0.02,  help="Gaussian noise std added to cont features")
     p.add_argument("--resume",        action="store_true",       help="Resume from checkpoint if available")
     p.add_argument("--dry-run",       action="store_true",       help="Load dataset and print shapes, then exit")
     return p.parse_args()

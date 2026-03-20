@@ -36,7 +36,7 @@ STEP 3 — Create .env at repo root
 
 STEP 4 — Run training
 ----------------------
-  python scripts/train.py --org org_3bq2jCKKsVv6 --temperature 0.05
+  python scripts/train.py --org org_3bq2jCKKsVv6
 
   The script will:
     - Fetch all session features from Upstash Redis (~2,500 sessions)
@@ -82,13 +82,16 @@ STEP 7 — Run cluster analysis locally (after pulling weights)
   KEY TRAINING FLAGS (optional overrides)
 ================================================================================
 
-  --temperature   NT-Xent temperature (default 0.07, use 0.05 for tighter clusters)
+  --temperature   NT-Xent temperature (default 0.125)
   --lr            Learning rate       (default 3e-4)
-  --min-sessions  Minimum sessions    (default 100)
-  --resume        Path to checkpoint  (resume from scripts/output/training/org_*_checkpoint.pt)
+  --min-sessions  Minimum sessions    (default 200)
+  --crop-ratio    Crop augmentation   (default 0.7)
+  --mask-ratio    Mask augmentation   (default 0.1)
+  --noise-std     Gaussian noise std  (default 0.02)
+  --resume        Resume from checkpoint (scripts/output/training/org_*_checkpoint.pt)
   --dry-run       Validate data loading without training
 
   Example:
-    python scripts/train.py --org org_3bq2jCKKsVv6 --temperature 0.05 --lr 1e-4
+    python scripts/train.py --org org_3bq2jCKKsVv6 --lr 1e-4
 
 ================================================================================
