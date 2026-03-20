@@ -1,0 +1,94 @@
+================================================================================
+  METRICADE — SimCLR Training Instructions (RunPod / GPU PC)
+================================================================================
+
+PREREQUISITES
+-------------
+- Python 3.10+
+- CUDA-capable GPU (RTX 3090 / A4000 / A100 recommended)
+- Git
+
+
+STEP 1 — Clone the repo
+-----------------------
+  git clone https://github.com/<your-username>/metricade.git
+  cd metricade
+
+
+STEP 2 — Install dependencies
+------------------------------
+  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+  pip install -r scripts/requirements.txt
+
+
+STEP 3 — Create .env at repo root
+-----------------------------------
+  Create a file named ".env" in the metricade/ root folder with this content:
+
+    UPSTASH_REDIS_URL=https://singular-fawn-58838.upstash.io
+    UPSTASH_REDIS_TOKEN=<your token>
+    UPSTASH_VECTOR_URL=https://bright-tiger-54944-us1-vector.upstash.io
+    UPSTASH_VECTOR_TOKEN=<your token>
+
+  Replace <your token> values with the real credentials.
+  (Tokens are in the .env on your local machine — copy them across.)
+
+
+STEP 4 — Run training
+----------------------
+  python scripts/train.py --org org_3bq2jCKKsVv6 --temperature 0.05
+
+  The script will:
+    - Fetch all session features from Upstash Redis (~2,500 sessions)
+    - Train BehavioralTransformer with SimCLR for 100 epochs
+    - Print loss + silhouette score each epoch
+    - Save best weights automatically
+
+  Expected runtime: ~15–30 min on a single GPU
+
+
+STEP 5 — Locate output weights
+--------------------------------
+  After training completes, two copies of weights are saved:
+
+    packages/model-worker/models/org_3bq2jCKKsVv6.pt        ← production copy
+    scripts/output/training/org_3bq2jCKKsVv6.pt             ← analysis copy
+
+  Both are identical. Use either.
+
+
+STEP 6 — Push weights back to GitHub
+--------------------------------------
+  git config user.email "you@example.com"
+  git config user.name  "Your Name"
+
+  git add packages/model-worker/models/org_3bq2jCKKsVv6.pt
+  git add scripts/output/training/org_3bq2jCKKsVv6.pt
+  git commit -m "feat: trained weights temperature=0.05"
+  git push origin main
+
+  Then on your local machine:
+    git pull
+
+
+STEP 7 — Run cluster analysis locally (after pulling weights)
+--------------------------------------------------------------
+  python scripts/cluster_analysis_v2.py --org org_3bq2jCKKsVv6
+
+  Output plot: scripts/output/cluster_v2/umap_clusters_org_3bq2jCKKsVv6.png
+
+
+================================================================================
+  KEY TRAINING FLAGS (optional overrides)
+================================================================================
+
+  --temperature   NT-Xent temperature (default 0.07, use 0.05 for tighter clusters)
+  --lr            Learning rate       (default 3e-4)
+  --min-sessions  Minimum sessions    (default 100)
+  --resume        Path to checkpoint  (resume from scripts/output/training/org_*_checkpoint.pt)
+  --dry-run       Validate data loading without training
+
+  Example:
+    python scripts/train.py --org org_3bq2jCKKsVv6 --temperature 0.05 --lr 1e-4
+
+================================================================================

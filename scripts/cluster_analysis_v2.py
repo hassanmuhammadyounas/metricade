@@ -5,8 +5,9 @@ This script:
 1) loads env vars from beta/.env if present, else from repo .env
 2) fetches feature tensors from Redis (metricade_features:{org_id}:*)
 3) encodes vectors locally with BehavioralTransformer + provided weights
-4) runs KMeans clustering and computes metrics
-5) saves outputs (plot, vectors, assignments, metrics) to scripts/output/cluster_v2
+4) fetches session metadata from Upstash Vector (ip_country) for annotations
+5) sweeps K=2..8, picks best K by silhouette score
+6) saves umap_clusters.png, vectors, assignments, metrics to scripts/output/cluster_v2
 """
 
 import argparse
@@ -15,8 +16,36 @@ import csv
 import io
 import json
 import os
+import subprocess
 import sys
+import warnings
 from pathlib import Path
+
+warnings.filterwarnings("ignore")
+
+# ── Auto-install dependencies ─────────────────────────────────────────────────
+def _check_and_install(packages: list[tuple[str, str]]) -> None:
+    for pkg, import_name in packages:
+        try:
+            __import__(import_name)
+        except ImportError:
+            print(f"  Installing {pkg}...")
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", pkg, "-q"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+print("Checking dependencies...")
+_check_and_install([
+    ("torch",        "torch"),
+    ("numpy",        "numpy"),
+    ("scikit-learn", "sklearn"),
+    ("umap-learn",   "umap"),
+    ("matplotlib",   "matplotlib"),
+    ("httpx",        "httpx"),
+])
+print("All dependencies satisfied.\n")
 
 import httpx
 import numpy as np
@@ -26,9 +55,9 @@ from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import cosine_distances
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT   = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = SCRIPTS_DIR / "output" / "cluster_v2"
+OUTPUT_DIR  = SCRIPTS_DIR / "output" / "cluster_v2"
 
 
 def _load_env_candidates() -> Path | None:
@@ -73,7 +102,9 @@ def _scan_feature_keys(redis_url: str, redis_token: str, org_id: str) -> list[st
     return keys
 
 
-def _load_sessions(redis_url: str, redis_token: str, keys: list[str]) -> tuple[list[str], list[np.ndarray], list[np.ndarray]]:
+def _load_sessions(
+    redis_url: str, redis_token: str, keys: list[str]
+) -> tuple[list[str], list[np.ndarray], list[np.ndarray]]:
     session_ids: list[str] = []
     cont_list: list[np.ndarray] = []
     cat_list: list[np.ndarray] = []
@@ -92,7 +123,7 @@ def _load_sessions(redis_url: str, redis_token: str, keys: list[str]) -> tuple[l
                 blob = base64.b64decode(raw)
                 npz = np.load(io.BytesIO(blob), allow_pickle=False)
                 cont = npz["cont"].astype(np.float32)  # [256, 40]
-                cat = npz["cat"].astype(np.int64)      # [8]
+                cat  = npz["cat"].astype(np.int64)     # [8]
                 session_id = key.split(":", 2)[2]
                 session_ids.append(session_id)
                 cont_list.append(cont)
@@ -106,7 +137,39 @@ def _load_sessions(redis_url: str, redis_token: str, keys: list[str]) -> tuple[l
     return session_ids, cont_list, cat_list
 
 
-def _encode_vectors(weights_path: Path, cont_list: list[np.ndarray], cat_list: list[np.ndarray]) -> np.ndarray:
+def _fetch_countries(
+    session_ids: list[str], vector_url: str, vector_token: str
+) -> dict[str, str]:
+    """Fetch ip_country for each session_id from Upstash Vector metadata."""
+    countries: dict[str, str] = {}
+    batch_size = 100
+    total = len(session_ids)
+    for i in range(0, total, batch_size):
+        batch = session_ids[i : i + batch_size]
+        try:
+            r = httpx.post(
+                vector_url.rstrip("/") + "/fetch",
+                headers={"Authorization": f"Bearer {vector_token}"},
+                json={"ids": batch, "includeMetadata": True, "includeVectors": False},
+                timeout=60,
+            )
+            if r.is_success:
+                for item in r.json().get("result", []):
+                    if item and item.get("metadata"):
+                        sid = item["id"]
+                        countries[sid] = str(item["metadata"].get("ip_country", "??"))
+        except Exception:
+            pass
+        print(f"Fetched metadata: {min(i + batch_size, total):,}/{total:,}", end="\r", flush=True)
+    print(f"Fetched metadata: {len(countries):,}/{total:,} with country")
+    return countries
+
+
+def _encode_vectors(
+    weights_path: Path,
+    cont_list: list[np.ndarray],
+    cat_list: list[np.ndarray],
+) -> np.ndarray:
     sys.path.insert(0, str(REPO_ROOT / "packages" / "model-worker"))
     from src.inference.transformer import BehavioralTransformer  # noqa: E402
 
@@ -119,8 +182,8 @@ def _encode_vectors(weights_path: Path, cont_list: list[np.ndarray], cat_list: l
     with torch.no_grad():
         for idx, (cont, cat) in enumerate(zip(cont_list, cat_list), start=1):
             cont_t = torch.from_numpy(cont).unsqueeze(0)  # [1, 256, 40]
-            cat_t = torch.from_numpy(cat).unsqueeze(0)    # [1, 8]
-            vec = model(cont_t, cat_t).squeeze(0).cpu().numpy().astype(np.float32)  # [192]
+            cat_t  = torch.from_numpy(cat).unsqueeze(0)   # [1, 8]
+            vec = model(cont_t, cat_t).squeeze(0).cpu().numpy().astype(np.float32)
             vectors.append(vec)
             if idx % 500 == 0:
                 print(f"Encoded vectors: {idx:,}/{len(cont_list):,}", end="\r", flush=True)
@@ -129,84 +192,91 @@ def _encode_vectors(weights_path: Path, cont_list: list[np.ndarray], cat_list: l
     return np.vstack(vectors) if vectors else np.empty((0, 192), dtype=np.float32)
 
 
-def _cluster(vectors_np: np.ndarray, k: int) -> tuple[np.ndarray, float, float, float]:
-    km = KMeans(n_clusters=k, random_state=42, n_init=10)
-    labels = km.fit_predict(vectors_np)
-    sil = float(silhouette_score(vectors_np, labels, metric="cosine"))
+def _best_cluster(
+    vectors_np: np.ndarray, n: int
+) -> tuple[np.ndarray, int, float, float, float]:
+    """Sweep K=2..min(8, n//5), return labels+metrics for best silhouette K."""
+    k_range = list(range(2, min(9, max(3, n // 5 + 1))))
+    best_labels, best_k, best_sil = None, k_range[0], -1.0
 
-    centroids = km.cluster_centers_
-    inter = []
-    for i in range(k):
-        for j in range(i + 1, k):
-            inter.append(float(cosine_distances([centroids[i]], [centroids[j]])[0][0]))
+    print(f"Sweeping K = {k_range[0]}..{k_range[-1]}:")
+    for k in k_range:
+        km     = KMeans(n_clusters=k, random_state=42, n_init=20)
+        labels = km.fit_predict(vectors_np)
+        sil    = float(silhouette_score(vectors_np, labels, metric="cosine"))
+        print(f"  K={k}  Silhouette={sil:.4f}")
+        if sil > best_sil:
+            best_sil    = sil
+            best_k      = k
+            best_labels = labels
+            best_km     = km
+
+    print(f"Best K = {best_k}  (Silhouette={best_sil:.4f})")
+
+    centroids = best_km.cluster_centers_
+    inter = [
+        float(cosine_distances([centroids[i]], [centroids[j]])[0][0])
+        for i in range(best_k)
+        for j in range(i + 1, best_k)
+    ]
     mean_inter = float(np.mean(inter)) if inter else 0.0
 
     intra = []
-    for c in range(k):
-        mask = labels == c
+    for c in range(best_k):
+        mask = best_labels == c
         if mask.sum() > 0:
-            d = cosine_distances(vectors_np[mask], [centroids[c]])
-            intra.extend(d.flatten().tolist())
-    mean_intra = float(np.mean(intra)) if intra else 0.0
+            intra.extend(cosine_distances(vectors_np[mask], [centroids[c]]).flatten().tolist())
+    net_sep = mean_inter - float(np.mean(intra)) if intra else 0.0
 
-    net_sep = mean_inter - mean_intra
-    return labels, sil, mean_inter, net_sep
+    return best_labels, best_k, best_sil, mean_inter, net_sep
 
 
-def _save_plot(org_id: str, vectors_np: np.ndarray, labels: np.ndarray, k: int, out_path: Path) -> None:
+def _save_umap_plot(
+    org_id: str,
+    vectors_np: np.ndarray,
+    labels: np.ndarray,
+    k: int,
+    countries: dict[str, str],
+    session_ids: list[str],
+    out_path: Path,
+) -> None:
     import matplotlib
-
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     try:
-        import umap  # type: ignore
-
-        proj = umap.UMAP(n_components=2, random_state=42, metric="cosine").fit_transform(vectors_np)
+        import umap as umap_lib
+        proj   = umap_lib.UMAP(n_components=2, random_state=42, metric="cosine").fit_transform(vectors_np)
         method = "UMAP"
     except Exception:
         from sklearn.decomposition import PCA
-
-        proj = PCA(n_components=2, random_state=42).fit_transform(vectors_np)
+        proj   = PCA(n_components=2, random_state=42).fit_transform(vectors_np)
         method = "PCA"
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-    fig.suptitle(f"Cluster Analysis v2 - {org_id}", fontsize=14, fontweight="bold")
+    ip_countries = np.array([countries.get(sid, "??") for sid in session_ids])
+    cmap = plt.cm.tab10(np.linspace(0, 0.9, k))
 
-    colors = plt.cm.tab10.colors
-    ax1 = axes[0]
-    for c in range(k):
-        mask = labels == c
-        ax1.scatter(
-            proj[mask, 0],
-            proj[mask, 1],
-            s=6,
-            alpha=0.55,
-            color=colors[c % len(colors)],
-            label=f"Cluster {c}",
+    fig, ax = plt.subplots(figsize=(10, 8))
+    for cid in range(k):
+        mask = labels == cid
+        ax.scatter(
+            proj[mask, 0], proj[mask, 1],
+            color=cmap[cid], marker="o",
+            s=100, alpha=0.8, edgecolors="black", linewidths=0.4,
+            label=f"Cluster {cid}  (n={int(mask.sum())})",
         )
-    ax1.set_title(f"2D Projection ({method})")
-    ax1.set_xlabel("Component 1")
-    ax1.set_ylabel("Component 2")
-    ax1.legend(markerscale=2)
+        for idx in np.where(mask)[0]:
+            ax.annotate(
+                ip_countries[idx],
+                (proj[idx, 0], proj[idx, 1]),
+                fontsize=6, ha="center", va="bottom",
+                xytext=(0, 4), textcoords="offset points", alpha=0.7,
+            )
 
-    ax2 = axes[1]
-    counts = [(labels == c).sum() for c in range(k)]
-    bars = ax2.bar(range(k), counts, color=[colors[c % len(colors)] for c in range(k)])
-    ax2.set_xticks(range(k))
-    ax2.set_xticklabels([f"Cluster {c}" for c in range(k)])
-    ax2.set_ylabel("Session count")
-    ax2.set_title("Sessions per Cluster")
-    for bar, count in zip(bars, counts):
-        ax2.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + 1,
-            str(int(count)),
-            ha="center",
-            va="bottom",
-            fontsize=9,
-        )
-
+    ax.set_xlabel(f"{method}-1")
+    ax.set_ylabel(f"{method}-2")
+    ax.set_title(f"Session Clusters ({method}) — {org_id}\ncolour = cluster, label = country")
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
@@ -214,21 +284,18 @@ def _save_plot(org_id: str, vectors_np: np.ndarray, labels: np.ndarray, k: int, 
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Cluster analysis on freshly encoded vectors from local weights.")
-    p.add_argument("--org", required=True, help="Org id to analyze.")
-    p.add_argument(
-        "--weights",
-        default=None,
-        help="Path to .pt weights. Defaults to scripts/output/training/{org}.pt",
-    )
-    p.add_argument("--k", type=int, default=3, help="Number of clusters.")
+    p.add_argument("--org",     required=True, help="Org id to analyze.")
+    p.add_argument("--weights", default=None,  help="Path to .pt weights. Defaults to scripts/output/training/{org}.pt")
     args = p.parse_args()
 
     loaded_env = _load_env_candidates()
     if loaded_env is None:
         raise RuntimeError("No env file found. Expected beta/.env or .env at repo root.")
 
-    redis_url = os.environ.get("UPSTASH_REDIS_URL", "").rstrip("/")
-    redis_token = os.environ.get("UPSTASH_REDIS_TOKEN", "")
+    redis_url    = os.environ.get("UPSTASH_REDIS_URL",    "").rstrip("/")
+    redis_token  = os.environ.get("UPSTASH_REDIS_TOKEN",  "")
+    vector_url   = os.environ.get("UPSTASH_VECTOR_URL",   "").rstrip("/")
+    vector_token = os.environ.get("UPSTASH_VECTOR_TOKEN", "")
     if not redis_url or not redis_token:
         raise RuntimeError("UPSTASH_REDIS_URL and UPSTASH_REDIS_TOKEN must be set.")
 
@@ -245,7 +312,7 @@ def main() -> None:
     print(f"Env loaded from: {loaded_env}")
     print(f"Using weights  : {weights_path}")
     print(f"Output dir     : {OUTPUT_DIR}")
-    print(f"Org            : {args.org}")
+    print(f"Org            : {args.org}\n")
 
     keys = _scan_feature_keys(redis_url, redis_token, args.org)
     if not keys:
@@ -253,15 +320,21 @@ def main() -> None:
     print(f"Discovered feature keys: {len(keys):,}")
 
     session_ids, cont_list, cat_list = _load_sessions(redis_url, redis_token, keys)
-    if len(session_ids) < max(3, args.k):
+    if len(session_ids) < 4:
         raise RuntimeError(f"Not enough valid sessions to cluster: {len(session_ids)}")
 
     vectors_np = _encode_vectors(weights_path, cont_list, cat_list)
-    if len(vectors_np) < max(3, args.k):
+    if len(vectors_np) < 4:
         raise RuntimeError(f"Not enough vectors to cluster: {len(vectors_np)}")
 
-    labels, sil, mean_inter, net_sep = _cluster(vectors_np, args.k)
+    labels, best_k, sil, mean_inter, net_sep = _best_cluster(vectors_np, len(vectors_np))
 
+    # Fetch country metadata for annotations (best-effort, fallback to "??")
+    countries: dict[str, str] = {}
+    if vector_url and vector_token:
+        countries = _fetch_countries(session_ids, vector_url, vector_token)
+
+    # Save vectors + assignments
     vectors_path = OUTPUT_DIR / f"vectors_{args.org}.npz"
     np.savez_compressed(vectors_path, vectors=vectors_np, session_ids=np.array(session_ids))
 
@@ -273,23 +346,27 @@ def main() -> None:
             writer.writerow([sid, int(c)])
 
     metrics = {
-        "org_id": args.org,
-        "k": int(args.k),
-        "n_sessions": int(len(session_ids)),
-        "silhouette_cosine": float(sil),
+        "org_id":                             args.org,
+        "k":                                  int(best_k),
+        "n_sessions":                         int(len(session_ids)),
+        "silhouette_cosine":                  float(sil),
         "mean_inter_cluster_cosine_distance": float(mean_inter),
-        "net_separation": float(net_sep),
-        "weights_path": str(weights_path),
-        "env_path": str(loaded_env),
+        "net_separation":                     float(net_sep),
+        "weights_path":                       str(weights_path),
+        "env_path":                           str(loaded_env),
     }
     metrics_path = OUTPUT_DIR / f"metrics_{args.org}.json"
     metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
 
-    plot_path = OUTPUT_DIR / f"cluster_analysis_{args.org}.png"
-    _save_plot(args.org, vectors_np, labels, args.k, plot_path)
+    plot_path = OUTPUT_DIR / f"umap_clusters_{args.org}.png"
+    _save_umap_plot(args.org, vectors_np, labels, best_k, countries, session_ids, plot_path)
 
     print("\nDone.")
-    print(f"Saved vectors    : {vectors_path}")
+    print(f"  Best K           : {best_k}")
+    print(f"  Silhouette       : {sil:.4f}")
+    print(f"  Net separation   : {net_sep:.4f}")
+    print(f"  Cluster sizes    : { {c: int((labels == c).sum()) for c in range(best_k)} }")
+    print(f"\nSaved vectors    : {vectors_path}")
     print(f"Saved assignments: {assignments_path}")
     print(f"Saved metrics    : {metrics_path}")
     print(f"Saved plot       : {plot_path}")
