@@ -125,6 +125,45 @@ fly scale count 1 --app behavioral-inference   # rollback if needed
 
 ---
 
+## Scripts (`scripts/`)
+
+All scripts read credentials from `.env` at repo root. Dependencies auto-install on first run (except `train.py`).
+
+### `scripts/train.py` — Offline SimCLR training
+Reads raw feature tensors from Redis (`metricade_features:{org_id}:*`), runs SimCLR contrastive learning starting from `bootstrap_random.pt`, saves trained weights.
+```bash
+pip install -r scripts/requirements.txt
+python scripts/train.py --org org_XXXX
+```
+**Current status**: SimCLR training has been attempted 3 times and consistently produces worse clustering (silhouette ~0.40) than bootstrap random init (silhouette ~0.71). The production model-worker still uses `bootstrap_random.pt`. Training approach needs rework (VICReg is the leading candidate) before trained weights should be deployed.
+
+- Trained weights and all output are **gitignored** — `scripts/output/`, `scripts/logs.txt`, and `models/org_*.pt` are never committed
+- Only `models/bootstrap_random.pt` is tracked in git
+
+### `scripts/cluster_analysis_upstash.py` — Cluster analysis from Upstash Vector (recommended)
+Fetches pre-computed 192-dim vectors **directly from Upstash Vector** (already encoded by the production model-worker). Interactive menus: select org → country → hostname. Outputs UMAP plot, feature heatmap, and clustering scores to `scripts/output/cluster_upstash/`.
+```bash
+python scripts/cluster_analysis_upstash.py
+# prompts: org → country → hostname
+```
+This is the correct script for evaluating production cluster quality. Vectors come from bootstrap weights so silhouette ~0.71.
+
+### `scripts/cluster_analysis_v2.py` — Cluster analysis with local weights
+Re-encodes sessions from Redis raw features (`metricade_features:{org_id}:*`) using a local `.pt` weight file. Use this to evaluate a newly trained model **before** deploying it.
+```bash
+python scripts/cluster_analysis_v2.py --org org_XXXX
+python scripts/cluster_analysis_v2.py --org org_XXXX --weights path/to/model.pt
+```
+If `--weights` is omitted, uses `scripts/output/training/{org_id}.pt`. Pass `bootstrap_random.pt` as `--weights` to establish the baseline.
+
+### `scripts/cluster_analysis.py` — Legacy v1
+Reads from Upstash Vector (same as `cluster_analysis_upstash.py`) but without interactive filtering or fraud scoring. Kept for reference.
+
+### `scripts/reset_databases.py` — Wipe Redis + Upstash Vector
+Destructive. Clears all Redis keys and all vectors for an org.
+
+---
+
 ## Testing & Validation
 
 ### Check worker logs
@@ -205,22 +244,6 @@ for v in r.json().get('result',{}).get('vectors',[]):
 - **Publishing**: always attempts `XADD` to stream. Falls back to `LPUSH` on `metricade_dlq:{org_id}` only if XADD fails. If both fail, throws → returns 500 to pixel (pixel re-queues events for retry).
 - **Slack alerting** (`src/alerts/slack.ts`): `notifySlack(webhookUrl, message)` — called on Redis failure. Requires `SLACK_WEBHOOK_URL` secret.
 - Full enriched message serialized as a single `payload` JSON field in the stream entry
-
-### ~~vector-worker~~ (`packages/vector-worker/`) — **DEPRECATED** (scaled to zero; replaced by feature-worker + model-worker)
-- Entry point: `src/main.py` — starts subscriber thread (`run_subscriber`) and HTTP health server (uvicorn on port 8080)
-- **Processing loop** (`src/subscriber.py`):
-  1. `XREADGROUP` — consume new messages from all discovered `metricade_stream:{org_id}` streams
-  2. Accumulate events: `_accumulate_events()` merges new flush events into `metricade_sess:{org_id}:{session_id}` in Redis (GET + SETEX, 4h TTL). Has an in-memory cache (60s TTL) to avoid Redis reads on hot sessions.
-  3. `featurize(merged_payload, enriched)` — produces `FeatureOutput(cont=[64, N_CONT], cat=[N_CAT])` — see Feature Vector section below
-  4. `model.encode(features)` — Transformer → L2-normalized 192-dim vector
-  5. `upsert_vector(session_id, vector, meta)` — keyed by `session_id` (one vector per session, upserted on every flush)
-  6. `XACK`
-- Every 150 loops (~5 min): re-scan for new org streams, run `XAUTOCLAIM` to reclaim idle PEL messages (idle >60s), clean up expired in-memory session cache.
-- **DLQ**: owned entirely by the edge worker. Vector worker does NOT drain DLQ.
-- **Model** (`src/inference/transformer.py`): `BehavioralTransformer` — nn.Embedding tables (browser, os, country, click_id, session_source, session_medium, device_vendor, page_path_hash) → concat embeddings (74 dims) with continuous features → Linear(N_CONT+74→128) → CLS token + TransformerEncoder(d_model=128, nhead=4, num_layers=2) → CLS output → Linear(128→192) → L2 normalize. Falls back to random init if model file not found at `MODEL_PATH`. All embedding tables start random and become meaningful after training on real sessions.
-- **Spot-check**: 1% of upserts are read back from Upstash Vector to verify persistence (`SPOT_CHECK_RATE=0.01`).
-- **`src/constants.py` default values are wrong** (`behavioral_stream`, `behavioral_dlq`) — always overridden by `fly.toml` env vars.
-- **Multi-org model strategy**: Two-tier — per-org model file (`models/{org_id}.pt`) for orgs with sufficient data; falls back to segment model (`models/segment_low_aov.pt` / `segment_mid_aov.pt` / `segment_high_aov.pt`) for new/small orgs. Segment assigned at org onboarding via `metricade_org:{org_id}` Redis key. Training pipeline is a separate offline script — not yet implemented.
 
 ---
 
@@ -356,4 +379,5 @@ Each vector stored in Upstash Vector has the following metadata:
 - **`src/constants.py` defaults are wrong** — always rely on `fly.toml` env vars overriding them
 - No test framework configured for edge-worker or pixel — add if needed
 - All deployments are manual — no CI/CD
-- Learned embeddings (`nn.Embedding` tables) are initialized randomly and produce meaningless vectors until the model is trained on real session data (~5,000 sessions minimum, ~20,000 for reliable embeddings). Collecting data now is the priority — training comes later.
+- **Production model-worker currently uses `bootstrap_random.pt` (random init)**. The `nn.Embedding` tables are meaningless until trained. SimCLR training has been attempted but consistently produces worse clustering than bootstrap (silhouette ~0.40 vs ~0.71). Do not deploy trained weights until they beat bootstrap on silhouette score. VICReg is the leading candidate to replace SimCLR.
+- **Git exclusions**: `scripts/output/`, `scripts/logs.txt`, and all `models/org_*.pt` / `models/*_checkpoint.pt` are gitignored. Only `models/bootstrap_random.pt` is tracked.

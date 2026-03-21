@@ -31,9 +31,15 @@ virtualenv/
 dist/
 .pytest_cache/
 
-# Model weights (large binary files — store in object storage, not git)
-# packages/model-worker/models/*.pt
-# !packages/model-worker/models/bootstrap_random.pt
+# Model weights — only bootstrap (seed weights) tracked; trained/org weights excluded
+packages/model-worker/models/*.pt
+packages/model-worker/models/*.ckpt
+!packages/model-worker/models/bootstrap_random.pt
+packages/model-worker/models/.gitkeep
+
+# Script outputs — never sync generated files or empty placeholder folders
+scripts/output/
+scripts/logs.txt
 
 # OS
 .DS_Store
@@ -50,4 +56,3 @@ Thumbs.db
 # Claude
 .claude/
 
-# scripts/output is intentionally NOT excluded — model weights must sync across devices
