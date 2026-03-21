@@ -90,7 +90,7 @@ cd packages/model-worker
 pip install -r requirements.txt
 fly deploy --app metricade-model-worker
 ```
-**Bootstrap weights** (`models/bootstrap_random.pt`) are committed to the repo — already generated with seed=42. If you ever need to regenerate them (e.g. after changing `BehavioralTransformer` architecture):
+**Bootstrap weights** (`models/bootstrap_random.pt`) are **not committed** — generate locally before deploying:
 ```python
 # Run from repo root:
 import sys, os, torch
@@ -137,8 +137,7 @@ python scripts/train.py --org org_XXXX
 ```
 **Current status**: SimCLR training has been attempted 3 times and consistently produces worse clustering (silhouette ~0.40) than bootstrap random init (silhouette ~0.71). The production model-worker still uses `bootstrap_random.pt`. Training approach needs rework (VICReg is the leading candidate) before trained weights should be deployed.
 
-- Trained weights and all output are **gitignored** — `scripts/output/`, `scripts/logs.txt`, and `models/org_*.pt` are never committed
-- Only `models/bootstrap_random.pt` is tracked in git
+- All model weights and outputs are **gitignored** — `scripts/output/`, `scripts/logs.txt`, `models/*.pt` are never committed
 
 ### `scripts/cluster_analysis_upstash.py` — Cluster analysis from Upstash Vector (recommended)
 Fetches pre-computed 192-dim vectors **directly from Upstash Vector** (already encoded by the production model-worker). Interactive menus: select org → country → hostname. Outputs UMAP plot, feature heatmap, and clustering scores to `scripts/output/cluster_upstash/`.
@@ -380,4 +379,4 @@ Each vector stored in Upstash Vector has the following metadata:
 - No test framework configured for edge-worker or pixel — add if needed
 - All deployments are manual — no CI/CD
 - **Production model-worker currently uses `bootstrap_random.pt` (random init)**. The `nn.Embedding` tables are meaningless until trained. SimCLR training has been attempted but consistently produces worse clustering than bootstrap (silhouette ~0.40 vs ~0.71). Do not deploy trained weights until they beat bootstrap on silhouette score. VICReg is the leading candidate to replace SimCLR.
-- **Git exclusions**: `scripts/output/`, `scripts/logs.txt`, and all `models/org_*.pt` / `models/*_checkpoint.pt` are gitignored. Only `models/bootstrap_random.pt` is tracked.
+- **Git exclusions**: `scripts/output/`, `scripts/logs.txt`, and all `models/*.pt` are gitignored. No model weights are tracked in git — generate `bootstrap_random.pt` locally using the snippet in the model-worker section above.

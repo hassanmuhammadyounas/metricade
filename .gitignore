@@ -31,11 +31,10 @@ virtualenv/
 dist/
 .pytest_cache/
 
-# Model weights — only bootstrap (seed weights) tracked; trained/org weights excluded
+# Model weights — never tracked; generate locally when needed
 packages/model-worker/models/*.pt
 packages/model-worker/models/*.ckpt
-!packages/model-worker/models/bootstrap_random.pt
-packages/model-worker/models/.gitkeep
+packages/model-worker/models/
 
 # Script outputs — never sync generated files or empty placeholder folders
 scripts/output/
