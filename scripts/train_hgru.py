@@ -62,11 +62,34 @@ except ImportError:
     import httpx
 
 from src.features import build_session_tensors
-from src.model import HierarchicalGRUEncoder, augment_events, vicreg_loss
+from src.model import HierarchicalGRUEncoder, supervised_nt_xent_loss
 from src.clickhouse import (
-    get_all_orgs, get_sessions_updated_since, get_session_events, get_robust_params,
+    get_all_orgs, get_all_session_events, get_robust_params,
 )
 from src.constants import DEFAULT_ROBUST
+
+
+def session_label(events: list[dict]) -> str:
+    """
+    Derive a behavioral label from session metadata.
+    Works for both synthetic (generated) and real sessions.
+    """
+    if not events:
+        return 'unknown'
+    first      = events[0]
+    ip_type    = (first.get('ip_type')    or '').lower()
+    device     = (first.get('device_type') or '').lower()
+    n_events   = len(events)
+
+    if n_events <= 3:
+        return 'bouncer'
+    if ip_type == 'datacenter' or device == 'bot':
+        return 'bot'
+    if device in ('mobile', 'tablet'):
+        return 'mobile'
+    if device == 'desktop':
+        return 'desktop'
+    return 'unknown'
 
 # ── CLI ───────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
@@ -121,27 +144,22 @@ for org_id in orgs:
     except Exception as e:
         print(f'  WARNING: robust params failed: {e}')
 
-    session_ids = get_sessions_updated_since('2000-01-01 00:00:00', org_id=org_id)
-    print(f'  {len(session_ids)} sessions')
-
-    for sid in session_ids:
-        try:
-            events = get_session_events(sid)
-            if events:
-                all_sessions.append(events)
-        except Exception as e:
-            print(f'  WARNING session={sid}: {e}')
+    # Single batch query — much faster than per-session queries
+    all_events = get_all_session_events(org_id)
+    print(f'  {len(all_events)} sessions')
+    all_sessions.extend(all_events.values())
 
 n = len(all_sessions)
 print(f'[{ts()}] Total sessions loaded: {n}')
 
 if n < 2:
-    print('ERROR: need at least 2 sessions to train. Collect more data first.')
+    print('ERROR: need at least 2 sessions to train.')
     sys.exit(1)
 
-if n < 8:
-    print(f'WARNING: only {n} sessions — VICReg covariance term will be weak. '
-          f'Results improve significantly with 50+ sessions.')
+# Show label distribution
+from collections import Counter
+label_counts = Counter(session_label(s) for s in all_sessions)
+print(f'[{ts()}] Label distribution: {dict(label_counts)}')
 
 # ── Build model ───────────────────────────────────────────────────────────
 model = HierarchicalGRUEncoder(event_hidden=64, session_hidden=64, embed_dim=64)
@@ -159,28 +177,27 @@ model.train()
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
-# ── Pre-build tensors (without augmentation) for caching ─────────────────
-# We'll apply augmentation on-the-fly each epoch
+# ── Pre-validate tensors ───────────────────────────────────────────────────
 print(f'[{ts()}] Pre-validating session tensors...')
-valid_sessions = []
+valid_sessions: list[tuple[list[dict], str]] = []  # (events, label)
 for events in all_sessions:
-    result = build_session_tensors(events, robust)
-    if result is not None:
-        valid_sessions.append(events)
+    if build_session_tensors(events, robust) is not None:
+        valid_sessions.append((events, session_label(events)))
 
-print(f'[{ts()}] Valid sessions: {len(valid_sessions)} / {n}')
-if len(valid_sessions) < 2:
-    print('ERROR: fewer than 2 valid sessions after tensor validation.')
+n_valid = len(valid_sessions)
+print(f'[{ts()}] Valid sessions: {n_valid} / {n}')
+if n_valid < 4:
+    print('ERROR: fewer than 4 valid sessions.')
     sys.exit(1)
 
-# ── Training loop ─────────────────────────────────────────────────────────
+# ── Training loop — supervised NT-Xent ────────────────────────────────────
 import random
 
-batch_size   = min(args.batch, len(valid_sessions))
+batch_size   = min(args.batch, n_valid)
 best_loss    = float('inf')
 loss_history = []
 
-print(f'[{ts()}] Training  epochs={args.epochs}  batch_size={batch_size}')
+print(f'[{ts()}] Training (supervised NT-Xent)  epochs={args.epochs}  batch={batch_size}')
 print('─' * 60)
 
 for epoch in range(1, args.epochs + 1):
@@ -188,39 +205,34 @@ for epoch in range(1, args.epochs + 1):
     random.shuffle(valid_sessions)
 
     epoch_losses = []
-    for batch_start in range(0, len(valid_sessions), batch_size):
+    for batch_start in range(0, n_valid, batch_size):
         batch = valid_sessions[batch_start : batch_start + batch_size]
         if len(batch) < 2:
             continue
 
-        z1_list, z2_list = [], []
-        for events in batch:
-            aug1 = augment_events(events, drop_rate=0.15)
-            aug2 = augment_events(events, drop_rate=0.15)
-
-            r1 = build_session_tensors(aug1, robust)
-            r2 = build_session_tensors(aug2, robust)
-            if r1 is None or r2 is None:
-                continue
-
-            pages1, ctx1 = r1
-            pages2, ctx2 = r2
-
-            # Move tensors to device
-            pages1 = [(e.to(DEVICE), p.to(DEVICE)) for e, p in pages1]
-            pages2 = [(e.to(DEVICE), p.to(DEVICE)) for e, p in pages2]
-            ctx1, ctx2 = ctx1.to(DEVICE), ctx2.to(DEVICE)
-
-            z1_list.append(model(pages1, ctx1))
-            z2_list.append(model(pages2, ctx2))
-
-        if len(z1_list) < 2:
+        # Ensure at least 2 distinct labels in the batch (required for NT-Xent)
+        batch_labels = [lbl for _, lbl in batch]
+        if len(set(batch_labels)) < 2:
             continue
 
-        z1 = torch.stack(z1_list)  # (batch, embed_dim)
-        z2 = torch.stack(z2_list)
+        z_list:     list[torch.Tensor] = []
+        label_list: list[str]          = []
 
-        loss = vicreg_loss(z1, z2)
+        for events, label in batch:
+            r = build_session_tensors(events, robust)
+            if r is None:
+                continue
+            pages, ctx = r
+            pages = [(e.to(DEVICE), p.to(DEVICE)) for e, p in pages]
+            ctx   = ctx.to(DEVICE)
+            z_list.append(model(pages, ctx))
+            label_list.append(label)
+
+        if len(z_list) < 2 or len(set(label_list)) < 2:
+            continue
+
+        z    = torch.stack(z_list)          # (batch, embed_dim)
+        loss = supervised_nt_xent_loss(z, label_list, temperature=0.07)
 
         optimizer.zero_grad()
         loss.backward()

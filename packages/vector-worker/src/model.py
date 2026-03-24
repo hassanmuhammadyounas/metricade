@@ -125,7 +125,59 @@ class HierarchicalGRUEncoder(nn.Module):
         return F.normalize(out, dim=-1)
 
 
-# ── VICReg loss ─────────────────────────────────────────────────────────────
+# ── Supervised NT-Xent loss ──────────────────────────────────────────────────
+
+def supervised_nt_xent_loss(
+    z: torch.Tensor,
+    labels: list[str],
+    temperature: float = 0.07,
+) -> torch.Tensor:
+    """
+    Supervised contrastive loss (NT-Xent variant).
+
+    z      : (N, D) L2-normalised embeddings
+    labels : length-N list of string labels (e.g. 'bot', 'mobile', 'desktop')
+
+    For each anchor i:
+      - Positives P(i): all j with the same label (j ≠ i)
+      - Negatives: all other samples in the batch
+      - Loss: -mean_p log( exp(sim(i,p)/τ) / Σ_{j≠i} exp(sim(i,j)/τ) )
+
+    Requires at least 2 distinct labels in the batch to produce a useful gradient.
+    """
+    N = z.shape[0]
+    device = z.device
+
+    # Pairwise cosine similarity matrix (z is already L2-normalised)
+    sim = z @ z.T / temperature          # (N, N)
+
+    # Mask out self on diagonal
+    eye  = torch.eye(N, device=device).bool()
+    sim  = sim.masked_fill(eye, float('-inf'))
+
+    # Log-softmax over all other samples (denominator = all j ≠ i)
+    log_probs = F.log_softmax(sim, dim=1)   # (N, N)
+
+    # Build positive mask: same label, not self
+    label_ids = torch.tensor(
+        [hash(l) & 0xFFFFFFFF for l in labels], dtype=torch.long, device=device
+    )
+    pos_mask = (label_ids.unsqueeze(0) == label_ids.unsqueeze(1))  # (N, N)
+    pos_mask.fill_diagonal_(False)
+
+    loss   = torch.tensor(0.0, device=device, requires_grad=True)
+    n_valid = 0
+    for i in range(N):
+        positives = pos_mask[i]
+        if not positives.any():
+            continue                      # singleton class in this batch — skip
+        loss = loss + (-log_probs[i][positives].mean())
+        n_valid += 1
+
+    return loss / n_valid if n_valid > 0 else loss
+
+
+# ── VICReg loss (kept for reference) ─────────────────────────────────────────
 
 def vicreg_loss(
     z1: torch.Tensor,
@@ -134,26 +186,12 @@ def vicreg_loss(
     var_coef: float = 25.0,
     cov_coef: float =  1.0,
 ) -> torch.Tensor:
-    """
-    VICReg: Variance-Invariance-Covariance Regularization.
-    z1, z2 : (batch, embed_dim) — two augmented views of the same sessions
-
-    Three terms:
-      Invariance : z1 ≈ z2  (same session, different augmentation)
-      Variance   : each dimension has std > 1  (prevents collapse)
-      Covariance : dimensions are decorrelated  (no redundancy)
-    """
+    """VICReg — use supervised_nt_xent_loss instead when labels are available."""
     N, D = z1.shape
-
-    # Invariance — MSE between the two views
     inv_loss = F.mse_loss(z1, z2)
-
-    # Variance — push std of each dim above 1
     std1 = torch.sqrt(z1.var(dim=0) + 1e-4)
     std2 = torch.sqrt(z2.var(dim=0) + 1e-4)
     var_loss = (F.relu(1.0 - std1).mean() + F.relu(1.0 - std2).mean()) / 2.0
-
-    # Covariance — off-diagonal elements should be zero
     z1c = z1 - z1.mean(dim=0)
     z2c = z2 - z2.mean(dim=0)
     cov1 = (z1c.T @ z1c) / (N - 1)
@@ -161,7 +199,6 @@ def vicreg_loss(
     off1 = cov1.pow(2).sum() - cov1.pow(2).diagonal().sum()
     off2 = cov2.pow(2).sum() - cov2.pow(2).diagonal().sum()
     cov_loss = (off1 + off2) / D
-
     return sim_coef * inv_loss + var_coef * var_loss + cov_coef * cov_loss
 
 
