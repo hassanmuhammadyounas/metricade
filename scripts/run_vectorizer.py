@@ -45,6 +45,8 @@ parser.add_argument('--vector-token', default=None, help='Upstash Vector REST to
 parser.add_argument('--org',          default=None)
 parser.add_argument('--since',        default='2000-01-01 00:00:00')
 parser.add_argument('--weights',      default=None, help='Path to hgru.pt weights')
+parser.add_argument('--wipe',         action='store_true',
+                    help='Delete ALL existing vectors from the index before upserting')
 args = parser.parse_args()
 
 # Apply credentials to env (CLI args override env vars)
@@ -69,6 +71,8 @@ if not os.environ['UPSTASH_VECTOR_TOKEN']:
     sys.exit(1)
 
 # ── Imports (after env is set) ────────────────────────────────────────────
+import httpx as _httpx
+
 from src.vectorizer import load_model, encode_session
 from src.clickhouse import (
     get_all_orgs, get_sessions_updated_since, get_session_events, get_robust_params,
@@ -79,7 +83,40 @@ from src.constants import DEFAULT_ROBUST
 def ts():
     return datetime.now(tz=timezone.utc).strftime('%H:%M:%S')
 
-print(f'[{ts()}] run_vectorizer.py  since={args.since}  org={args.org}')
+print(f'[{ts()}] run_vectorizer.py  since={args.since}  org={args.org}  wipe={args.wipe}')
+
+# ── Optional index wipe ────────────────────────────────────────────────────
+if args.wipe:
+    print(f'[{ts()}] Wiping all vectors from index...')
+    _base   = os.environ['UPSTASH_VECTOR_URL'].rstrip('/')
+    _hdrs   = {'Authorization': f'Bearer {os.environ["UPSTASH_VECTOR_TOKEN"]}',
+               'Content-Type': 'application/json'}
+
+    # Scan all IDs via range then delete in batches
+    cursor   = '0'
+    all_ids: list[str] = []
+    while True:
+        r = _httpx.post(f'{_base}/range', headers=_hdrs,
+                        json={'cursor': cursor, 'limit': 1000,
+                              'includeVectors': False, 'includeMetadata': False},
+                        timeout=30)
+        r.raise_for_status()
+        result  = r.json().get('result', {})
+        vectors = result.get('vectors', [])
+        all_ids.extend(v['id'] for v in vectors)
+        cursor = result.get('nextCursor', '0')
+        if not cursor or cursor == '0' or not vectors:
+            break
+
+    if all_ids:
+        BATCH = 1000
+        for i in range(0, len(all_ids), BATCH):
+            chunk = all_ids[i:i + BATCH]
+            r = _httpx.post(f'{_base}/delete', headers=_hdrs, json=chunk, timeout=30)
+            r.raise_for_status()
+        print(f'[{ts()}] Deleted {len(all_ids)} existing vectors')
+    else:
+        print(f'[{ts()}] Index already empty')
 
 # ── Load model ────────────────────────────────────────────────────────────
 model, device = load_model(args.weights)

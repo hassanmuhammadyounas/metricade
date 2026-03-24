@@ -70,10 +70,15 @@ for v in vectors:
 
 min_norm = min(norms)
 max_norm = max(norms)
+stale = sum(1 for norm in norms if norm < 0.99 or norm > 1.01)
 print(f'\n[1] Norm check  (expect ~1.0 for all)')
-print(f'    min={min_norm:.4f}  max={max_norm:.4f}')
-norm_ok = min_norm > 0.99 and max_norm < 1.01
-print(f'    {"PASS" if norm_ok else "FAIL — vectors are not L2-normalised"}')
+print(f'    min={min_norm:.4f}  max={max_norm:.4f}  stale/unnormalized={stale}')
+norm_ok = stale == 0
+if norm_ok:
+    print('    PASS')
+else:
+    print(f'    FAIL — {stale} stale vector(s) with wrong norm (from an older pipeline run)')
+    print(f'    Fix: re-run with --wipe flag to clear index, then re-vectorize')
 
 # ── Check 2: dimension ─────────────────────────────────────────────────────
 dims = set(len(v.get('vector') or []) for v in vectors)
@@ -86,12 +91,18 @@ print(f'    {"PASS" if dim_ok else "FAIL — wrong dimension"}')
 def dot(a, b):
     return sum(x * y for x, y in zip(a, b))
 
+def normalize(v):
+    n = math.sqrt(sum(x * x for x in v))
+    return [x / n for x in v] if n > 1e-8 else v
+
 vecs = [v.get('vector') or [] for v in vectors]
+# Always normalize before computing cosine — handles stale unnormalized vectors
+vecs_norm = [normalize(v) for v in vecs]
 sims = []
 for i in range(min(n, 20)):
     for j in range(i + 1, min(n, 20)):
-        if vecs[i] and vecs[j]:
-            sims.append(dot(vecs[i], vecs[j]))  # L2-norm = 1 so dot = cosine
+        if vecs_norm[i] and vecs_norm[j]:
+            sims.append(dot(vecs_norm[i], vecs_norm[j]))
 
 if sims:
     min_sim  = min(sims)
