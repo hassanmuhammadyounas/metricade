@@ -62,7 +62,7 @@ except ImportError:
     import httpx
 
 from src.features import build_session_tensors
-from src.model import HierarchicalGRUEncoder, supervised_nt_xent_loss
+from src.model import HierarchicalGRUEncoder, augment_events, vicreg_loss
 from src.clickhouse import (
     get_all_orgs, get_all_session_events, get_robust_params,
 )
@@ -190,60 +190,54 @@ if n_valid < 4:
     print('ERROR: fewer than 4 valid sessions.')
     sys.exit(1)
 
-# ── Training loop — supervised NT-Xent ────────────────────────────────────
+# ── Training loop — VICReg with strong augmentation ───────────────────────
 import random
-from collections import defaultdict
 
-# Build per-label index for balanced sampling
-label_to_sessions: dict[str, list] = defaultdict(list)
-for item in valid_sessions:
-    label_to_sessions[item[1]].append(item)
+batch_size        = min(args.batch, n_valid)
+best_loss         = float('inf')
+loss_history      = []
 
-labels_present  = sorted(label_to_sessions.keys())
-n_labels        = len(labels_present)
-per_label       = max(2, min(args.batch // n_labels, 32))  # samples per class per batch
-effective_batch = per_label * n_labels
-best_loss       = float('inf')
-loss_history    = []
-
-print(f'[{ts()}] Training (supervised NT-Xent, balanced)  '
-      f'epochs={args.epochs}  per_class={per_label}  effective_batch={effective_batch}')
-print(f'[{ts()}] Classes: {labels_present}')
+print(f'[{ts()}] Training (VICReg + strong augmentation)  '
+      f'epochs={args.epochs}  batch={batch_size}')
 print('─' * 60)
-
-# How many balanced batches per epoch (cover dataset at least once)
-batches_per_epoch = max(1, n_valid // effective_batch)
 
 for epoch in range(1, args.epochs + 1):
     model.train()
+    # Shuffle the (events, label) pairs; we only use events here
+    random.shuffle(valid_sessions)
 
     epoch_losses = []
-    for _ in range(batches_per_epoch):
-        # Sample equal number of sessions from each class
-        batch: list[tuple] = []
-        for lbl in labels_present:
-            pool = label_to_sessions[lbl]
-            batch.extend(random.choices(pool, k=per_label))
-        random.shuffle(batch)
-
-        z_list:     list[torch.Tensor] = []
-        label_list: list[str]          = []
-
-        for events, label in batch:
-            r = build_session_tensors(events, robust)
-            if r is None:
-                continue
-            pages, ctx = r
-            pages = [(e.to(DEVICE), p.to(DEVICE)) for e, p in pages]
-            ctx   = ctx.to(DEVICE)
-            z_list.append(model(pages, ctx))
-            label_list.append(label)
-
-        if len(z_list) < 2 or len(set(label_list)) < 2:
+    for batch_start in range(0, n_valid, batch_size):
+        batch = valid_sessions[batch_start : batch_start + batch_size]
+        if len(batch) < 2:
             continue
 
-        z    = torch.stack(z_list)          # (batch, embed_dim)
-        loss = supervised_nt_xent_loss(z, label_list, temperature=0.05)
+        z1_list, z2_list = [], []
+        for events, _ in batch:
+            # Two strongly-augmented views of the same session
+            aug1 = augment_events(events)
+            aug2 = augment_events(events)
+
+            r1 = build_session_tensors(aug1, robust)
+            r2 = build_session_tensors(aug2, robust)
+            if r1 is None or r2 is None:
+                continue
+
+            pages1, ctx1 = r1
+            pages2, ctx2 = r2
+            pages1 = [(e.to(DEVICE), p.to(DEVICE)) for e, p in pages1]
+            pages2 = [(e.to(DEVICE), p.to(DEVICE)) for e, p in pages2]
+            ctx1, ctx2 = ctx1.to(DEVICE), ctx2.to(DEVICE)
+
+            z1_list.append(model(pages1, ctx1))
+            z2_list.append(model(pages2, ctx2))
+
+        if len(z1_list) < 2:
+            continue
+
+        z1   = torch.stack(z1_list)
+        z2   = torch.stack(z2_list)
+        loss = vicreg_loss(z1, z2)
 
         optimizer.zero_grad()
         loss.backward()

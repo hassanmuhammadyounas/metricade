@@ -204,25 +204,64 @@ def vicreg_loss(
 
 # ── Augmentation ─────────────────────────────────────────────────────────────
 
-def augment_events(events: list[dict], drop_rate: float = 0.15) -> list[dict]:
+def augment_events(events: list[dict], drop_rate: float = 0.40) -> list[dict]:
     """
-    Create one augmented view of a session's event list:
-      - Randomly drop ~15% of events (not page_view/route_change)
-      - Jitter delta_ms by ±10%
+    Create one strongly-augmented view of a session's event list.
+
+    Augmentations (applied independently — two calls produce genuinely
+    different views of the same behavioural identity):
+
+    1. Page dropout  — drop entire pages (30% each) except the first
+    2. Event dropout — drop 40% of non-navigation events per surviving page
+    3. Time warp     — scale ALL delta_ms by a single session-wide factor (0.2–5×)
+                       Forces the model to learn timing-invariant patterns
+    4. Velocity jitter — scale scroll_velocity_px_s by 0.3–3×
     """
     import random
-    result = []
+
+    # ── Group by page (split on page_view / route_change) ──────────────────
+    pages: list[list[dict]] = []
+    current: list[dict] = []
     for e in events:
         et = (e.get('event_type') or '').lower()
-        # Always keep page navigation events (preserve page structure)
-        if et in ('page_view', 'route_change'):
-            result.append(e)
-            continue
-        if random.random() < drop_rate:
-            continue
-        # Jitter delta_ms
-        if e.get('delta_ms') is not None:
+        if et in ('page_view', 'route_change') and current:
+            pages.append(current)
+            current = [e]
+        else:
+            current.append(e)
+    if current:
+        pages.append(current)
+
+    # ── Page dropout (keep first page always) ──────────────────────────────
+    surviving = [pages[0]] if pages else []
+    for page in pages[1:]:
+        if random.random() > 0.30:          # 70% chance to keep each page
+            surviving.append(page)
+
+    # ── Event dropout + time-warp + velocity jitter ────────────────────────
+    time_warp = random.uniform(0.2, 5.0)    # one warp factor for the whole session
+    vel_scale = random.uniform(0.3, 3.0)
+
+    result: list[dict] = []
+    for page in surviving:
+        for e in page:
+            et = (e.get('event_type') or '').lower()
+            nav = et in ('page_view', 'route_change')
+
+            # Event dropout — never drop navigation events
+            if not nav and random.random() < drop_rate:
+                continue
+
             e = dict(e)
-            e['delta_ms'] = e['delta_ms'] * random.uniform(0.9, 1.1)
-        result.append(e)
-    return result if result else events  # guard: never return empty
+
+            # Time warp
+            if e.get('delta_ms') is not None:
+                e['delta_ms'] = e['delta_ms'] * time_warp
+
+            # Velocity jitter
+            if e.get('scroll_velocity_px_s') is not None:
+                e['scroll_velocity_px_s'] = e['scroll_velocity_px_s'] * vel_scale
+
+            result.append(e)
+
+    return result if result else events     # guard: never return empty
