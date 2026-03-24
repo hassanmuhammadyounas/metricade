@@ -62,7 +62,7 @@ except ImportError:
     import httpx
 
 from src.features import build_session_tensors
-from src.model import HierarchicalGRUEncoder, augment_events, vicreg_loss
+from src.model import HierarchicalGRUEncoder, augment_tensors, vicreg_loss
 from src.clickhouse import (
     get_all_orgs, get_all_session_events, get_robust_params,
 )
@@ -177,15 +177,22 @@ model.train()
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
-# ── Pre-validate tensors ───────────────────────────────────────────────────
-print(f'[{ts()}] Pre-validating session tensors...')
-valid_sessions: list[tuple[list[dict], str]] = []  # (events, label)
+# ── Pre-build and cache all tensors once ──────────────────────────────────
+print(f'[{ts()}] Pre-building session tensors (cached for all epochs)...')
+# Each entry: (pages_data_cpu, session_ctx_cpu, label)
+# Tensors kept on CPU; moved to GPU per batch during training
+CachedSession = tuple  # (pages_data, session_ctx, label)
+cached: list[CachedSession] = []
 for events in all_sessions:
-    if build_session_tensors(events, robust) is not None:
-        valid_sessions.append((events, session_label(events)))
+    result = build_session_tensors(events, robust)
+    if result is not None:
+        pages_data, session_ctx = result
+        cached.append((pages_data, session_ctx, session_label(events)))
 
-n_valid = len(valid_sessions)
-print(f'[{ts()}] Valid sessions: {n_valid} / {n}')
+valid_sessions = cached  # alias used below
+
+n_valid = len(cached)
+print(f'[{ts()}] Cached sessions: {n_valid} / {n}')
 if n_valid < 4:
     print('ERROR: fewer than 4 valid sessions.')
     sys.exit(1)
@@ -208,18 +215,15 @@ for epoch in range(1, args.epochs + 1):
 
     epoch_losses = []
     for batch_start in range(0, n_valid, batch_size):
-        batch = valid_sessions[batch_start : batch_start + batch_size]
+        batch = cached[batch_start : batch_start + batch_size]
         if len(batch) < 2:
             continue
 
         z1_list, z2_list = [], []
-        for events, _ in batch:
-            # Two strongly-augmented views of the same session
-            aug1 = augment_events(events)
-            aug2 = augment_events(events)
-
-            r1 = build_session_tensors(aug1, robust)
-            r2 = build_session_tensors(aug2, robust)
+        for pages_data, session_ctx, _ in batch:
+            # Two tensor-level augmented views — no Python feature re-engineering
+            r1 = augment_tensors(pages_data, session_ctx)
+            r2 = augment_tensors(pages_data, session_ctx)
             if r1 is None or r2 is None:
                 continue
 
@@ -277,12 +281,9 @@ print(f'[{ts()}] Loss log    → {log_path}')
 print(f'\n[{ts()}] Sanity check — embedding first 3 sessions:')
 model.eval()
 with torch.no_grad():
-    for i, (events, lbl) in enumerate(valid_sessions[:3]):
-        result = build_session_tensors(events, robust)
-        if result:
-            pages, ctx = result
-            pages = [(e.to(DEVICE), p.to(DEVICE)) for e, p in pages]
-            ctx   = ctx.to(DEVICE)
-            vec   = model(pages, ctx)
-            norm  = vec.norm().item()
-            print(f'  session {i}: norm={norm:.4f}  vec[:5]={vec[:5].tolist()}')
+    for i, (pages_data, session_ctx, lbl) in enumerate(cached[:3]):
+        pages = [(e.to(DEVICE), p.to(DEVICE)) for e, p in pages_data]
+        ctx   = session_ctx.to(DEVICE)
+        vec   = torch.nn.functional.normalize(model(pages, ctx), dim=-1)
+        norm  = vec.norm().item()
+        print(f'  session {i} [{lbl}]: norm={norm:.4f}  vec[:5]={vec[:5].tolist()}')

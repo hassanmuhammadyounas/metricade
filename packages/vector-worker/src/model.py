@@ -202,7 +202,69 @@ def vicreg_loss(
     return sim_coef * inv_loss + var_coef * var_loss + cov_coef * cov_loss
 
 
-# ── Augmentation ─────────────────────────────────────────────────────────────
+# ── Tensor-level augmentation (fast — no Python feature re-engineering) ──────
+
+def augment_tensors(
+    pages_data: list[tuple[torch.Tensor, torch.Tensor]],
+    session_ctx: torch.Tensor,
+    drop_rate: float = 0.40,
+    page_drop: float = 0.30,
+    noise_std: float = 0.05,
+) -> tuple[list[tuple[torch.Tensor, torch.Tensor]], torch.Tensor] | None:
+    """
+    Augment pre-built tensors without re-running feature engineering.
+
+    1. Page dropout   — drop entire pages with p=page_drop (keep first always)
+    2. Event row mask — zero out drop_rate fraction of event rows
+    3. Time-warp      — scale all delta_ms rows (col 7) by 0.2–5×
+    4. Velocity jitter— scale scroll velocity rows (col 8) by 0.3–3×
+    5. Gaussian noise — add small noise to all continuous values
+
+    Returns None if no pages survive (extremely rare).
+    """
+    import random
+
+    # ── Page dropout ─────────────────────────────────────────────────────────
+    surviving = [pages_data[0]] if pages_data else []
+    for page in pages_data[1:]:
+        if random.random() > page_drop:
+            surviving.append(page)
+    if not surviving:
+        return None
+
+    # ── Per-page event augmentation ──────────────────────────────────────────
+    time_warp = random.uniform(0.2, 5.0)
+    vel_scale = random.uniform(0.3, 3.0)
+
+    aug_pages = []
+    for evt_seq, page_feat in surviving:
+        evt = evt_seq.clone()                               # (n_events, EVENT_DIM)
+
+        # Row mask — zero out drop_rate of non-first rows
+        if evt.shape[0] > 1:
+            mask = torch.rand(evt.shape[0] - 1) > drop_rate
+            # keep first row (page_view) always
+            full_mask = torch.cat([torch.tensor([True]), mask])
+            evt = evt * full_mask.unsqueeze(1).float()
+
+        # Time-warp: col 7 (delta_ms feature)
+        if evt.shape[1] > 7:
+            evt[:, 7] = evt[:, 7] * time_warp
+
+        # Velocity jitter: col 8 (scroll_velocity)
+        if evt.shape[1] > 8:
+            evt[:, 8] = evt[:, 8] * vel_scale
+
+        # Gaussian noise on all continuous cols (7 one-hot + rest continuous)
+        evt[:, 7:] = evt[:, 7:] + torch.randn_like(evt[:, 7:]) * noise_std
+
+        aug_pages.append((evt, page_feat))
+
+    ctx = session_ctx + torch.randn_like(session_ctx) * noise_std
+    return aug_pages, ctx
+
+
+# ── Event-level augmentation (kept for reference) ────────────────────────────
 
 def augment_events(events: list[dict], drop_rate: float = 0.40) -> list[dict]:
     """
