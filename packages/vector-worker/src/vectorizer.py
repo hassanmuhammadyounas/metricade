@@ -67,5 +67,6 @@ def encode_session(
     pages_data  = [(e.to(device), p.to(device)) for e, p in pages_data]
     session_ctx = session_ctx.to(device)
 
-    vec = model(pages_data, session_ctx)   # (64,) L2-normalised
+    vec = model(pages_data, session_ctx)        # (64,) raw
+    vec = F.normalize(vec, dim=-1)              # L2-normalise for storage
     return vec.cpu().tolist()

@@ -120,9 +120,9 @@ class HierarchicalGRUEncoder(nn.Module):
         hidden_states, _ = self.session_gru(page_seq, h0)  # (1, n_pages, session_hidden)
         session_emb = hidden_states.squeeze(0).mean(dim=0)  # (session_hidden,)
 
-        # Project and L2-normalise
+        # Project — raw embedding for training (normalise at inference time)
         out = self.proj(session_emb)                        # (embed_dim,)
-        return F.normalize(out, dim=-1)
+        return out
 
 
 # ── Supervised NT-Xent loss ──────────────────────────────────────────────────
