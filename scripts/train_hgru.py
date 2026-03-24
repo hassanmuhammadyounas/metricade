@@ -192,28 +192,39 @@ if n_valid < 4:
 
 # ── Training loop — supervised NT-Xent ────────────────────────────────────
 import random
+from collections import defaultdict
 
-batch_size   = min(args.batch, n_valid)
-best_loss    = float('inf')
-loss_history = []
+# Build per-label index for balanced sampling
+label_to_sessions: dict[str, list] = defaultdict(list)
+for item in valid_sessions:
+    label_to_sessions[item[1]].append(item)
 
-print(f'[{ts()}] Training (supervised NT-Xent)  epochs={args.epochs}  batch={batch_size}')
+labels_present  = sorted(label_to_sessions.keys())
+n_labels        = len(labels_present)
+per_label       = max(2, min(args.batch // n_labels, 32))  # samples per class per batch
+effective_batch = per_label * n_labels
+best_loss       = float('inf')
+loss_history    = []
+
+print(f'[{ts()}] Training (supervised NT-Xent, balanced)  '
+      f'epochs={args.epochs}  per_class={per_label}  effective_batch={effective_batch}')
+print(f'[{ts()}] Classes: {labels_present}')
 print('─' * 60)
+
+# How many balanced batches per epoch (cover dataset at least once)
+batches_per_epoch = max(1, n_valid // effective_batch)
 
 for epoch in range(1, args.epochs + 1):
     model.train()
-    random.shuffle(valid_sessions)
 
     epoch_losses = []
-    for batch_start in range(0, n_valid, batch_size):
-        batch = valid_sessions[batch_start : batch_start + batch_size]
-        if len(batch) < 2:
-            continue
-
-        # Ensure at least 2 distinct labels in the batch (required for NT-Xent)
-        batch_labels = [lbl for _, lbl in batch]
-        if len(set(batch_labels)) < 2:
-            continue
+    for _ in range(batches_per_epoch):
+        # Sample equal number of sessions from each class
+        batch: list[tuple] = []
+        for lbl in labels_present:
+            pool = label_to_sessions[lbl]
+            batch.extend(random.choices(pool, k=per_label))
+        random.shuffle(batch)
 
         z_list:     list[torch.Tensor] = []
         label_list: list[str]          = []
@@ -232,7 +243,7 @@ for epoch in range(1, args.epochs + 1):
             continue
 
         z    = torch.stack(z_list)          # (batch, embed_dim)
-        loss = supervised_nt_xent_loss(z, label_list, temperature=0.07)
+        loss = supervised_nt_xent_loss(z, label_list, temperature=0.05)
 
         optimizer.zero_grad()
         loss.backward()
@@ -272,7 +283,7 @@ print(f'[{ts()}] Loss log    → {log_path}')
 print(f'\n[{ts()}] Sanity check — embedding first 3 sessions:')
 model.eval()
 with torch.no_grad():
-    for i, events in enumerate(valid_sessions[:3]):
+    for i, (events, lbl) in enumerate(valid_sessions[:3]):
         result = build_session_tensors(events, robust)
         if result:
             pages, ctx = result
