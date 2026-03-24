@@ -249,7 +249,7 @@ for v in r.json().get('result',{}).get('vectors',[]):
 ## Feature Vector — Complete Reference
 
 `packages/feature-worker/src/inference/featurizer.py` produces a `FeatureOutput` dataclass:
-- `cont`: `[min(len(events), MAX_RAW_EVENTS), N_CONT]` float32 tensor — continuous features per event row (N_CONT = 40, variable length up to 2048)
+- `cont`: `[min(len(events), MAX_RAW_EVENTS), N_CONT]` float32 tensor — continuous features per event row (N_CONT = 41, variable length up to 2048)
 - `cat`: `[8]` int64 tensor — session-level categorical indices (one per categorical field, N_CAT = 8)
 
 After featurization, `packages/feature-worker/src/inference/token_merger.py` compresses the variable-length cont tensor:
@@ -262,7 +262,7 @@ After featurization, `packages/feature-worker/src/inference/token_merger.py` com
 `page_path_hash` from pixel.js is a hex string — parsed into a vocabulary index (not a float).
 Session-level fields use `_pget()`: reads from payload root first, falls back to `page_view` event for backwards compatibility.
 
-### Continuous features (`cont` tensor — per event row, N_CONT = 40)
+### Continuous features (`cont` tensor — per event row, N_CONT = 41)
 
 | Index | Feature | Source | Encoding |
 |-------|---------|--------|----------|
@@ -306,8 +306,11 @@ Session-level fields use `_pget()`: reads from payload root first, falls back to
 | 37 | prior_session_count | enriched.prior_session_count | log1p(val) / log1p(20), capped at 1.0 |
 | 38 | ip_type | enriched.ip_meta.ip_type | ordinal: residential=0.0, unknown=0.5, datacenter=1.0 |
 | 39 | device_type | enriched.ua_meta.device_type | ordinal: mobile=1.0, tablet=0.75, desktop=0.5, unknown=0.25, bot=0.0 |
+| 40 | time_to_first_interaction_ms | payload root | log1p(val) / log1p(30000), capped at 1.0; 0.0 on bounce (null) |
 
 **Dropped**: `page_id` (pure noise — unique UUID per page, model can never learn from it). `page_path_hash` moved to categorical (learned embedding — same path = same index = model learns page-type similarity).
+
+**browser_family normalization**: ua-parser-js returns variant names ("Chrome Mobile", "Samsung Browser", "Firefox for iOS") that don't match BROWSER_VOCAB. `featurizer.py` normalizes these via `BROWSER_FAMILY_ALIASES` before vocab lookup (e.g. "chrome mobile" → "chrome", "samsung browser" → "samsung_internet"). Update `BROWSER_FAMILY_ALIASES` when adding new browsers to `BROWSER_VOCAB`.
 
 ### Categorical features (`cat` tensor — session-level, integer indices, N_CAT = 8)
 

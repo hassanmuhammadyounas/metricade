@@ -13,6 +13,8 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
   const config = window.__METRICADE_CONFIG__ || {};
   const ingestUrl    = 'https://worker.metricade.com/ingest';
   const ingestSecret = 'a2714436ee112adcbd0780a68859a76b1522462984ccad0a3e69cdb86b81331b';
+  const dbIngestUrl    = 'https://db.metricade.com/ingest';
+  const dbIngestSecret = 'a2714436ee112adcbd0780a68859a76b1522462984ccad0a3e69cdb86b81331b';
   const orgId = config.orgId || null;
   const flushSize = config.flushSize || 30;
   const flushIntervalMs = config.flushIntervalMs || 10_000;
@@ -107,6 +109,13 @@ import { getSessionFromReferrer } from './referrer-mapping.js';
         .then((res) => { if (!res.ok) payload.events.forEach((e) => buffer.push({ ...e, is_retry: true })); })
         .catch(() => { payload.events.forEach((e) => buffer.push({ ...e, is_retry: true })); });
     }
+    // db-worker — fire-and-forget, never retried, never blocks pixel
+    fetch(dbIngestUrl, {
+      method: 'POST',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': dbIngestSecret },
+      body,
+    }).catch(() => {});
   }
 
   // ─── Interval flush ───────────────────────────────────────────────────────

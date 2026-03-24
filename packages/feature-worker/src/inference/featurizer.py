@@ -10,7 +10,7 @@ from typing import Any
 from ..constants import MAX_RAW_EVENTS
 
 MAX_SEQ_LEN = 256
-N_CONT = 40   # continuous features per event row
+N_CONT = 41   # continuous features per event row
 N_CAT  = 8   # session-level categorical indices
 
 # ── Categorical vocabularies ─────────────────────────────────────────────────
@@ -74,6 +74,33 @@ DEVICE_VENDOR_VOCAB: dict[str, int] = {
     "vivo": 11, "sony": 12, "nokia": 13, "htc": 14, "asus": 15,
     "lenovo": 16, "microsoft": 17,
 }  # vocab_size = 18
+
+# Normalize ua-parser-js browser name variants to canonical BROWSER_VOCAB keys.
+# ua-parser-js returns names like "Chrome Mobile", "Samsung Browser", "Firefox for iOS"
+# which after lowercasing don't match the vocab. Map them to the canonical form.
+BROWSER_FAMILY_ALIASES: dict[str, str] = {
+    "chrome mobile":            "chrome",
+    "chrome mobile webview":    "chrome",
+    "mobile chrome":            "chrome",
+    "chrome webview":           "webview",
+    "android webview":          "webview",
+    "samsung browser":          "samsung_internet",
+    "firefox for ios":          "firefox",
+    "firefox mobile":           "firefox",
+    "opera mobile":             "opera",
+    "opera mini":               "opera_mini",
+    "mobile safari":            "mobile_safari",
+    "safari mobile":            "mobile_safari",
+    "edge chromium":            "edge",
+    "microsoft edge":           "edge",
+    "yandex browser":           "yandex",
+    "miui browser":             "miui",
+    "uc browser":               "uc_browser",
+    "tiktok app":               "tiktok",
+    "instagram app":            "instagram",
+    "facebook app":             "facebook",
+    "wechat app":               "wechat",
+}
 
 # page_path_hash: modulo bucketing over fixed vocab size.
 # raw hex → int → (int % PAGE_PATH_HASH_VOCAB_SIZE) + 1
@@ -148,6 +175,13 @@ def _extract_session(payload: dict, events: list, enriched: dict) -> dict:
             "mobile": 1.0, "tablet": 0.75, "desktop": 0.5, "unknown": 0.25, "bot": 0.0,
         }.get(ua.get("device_type", "unknown"), 0.25),
 
+        # time_to_first_interaction_ms: null on bounce, ms from page load to first
+        # scroll/click/touch/keydown. log1p-compressed and capped at 30 s.
+        "time_to_first_ms": min(
+            math.log1p(float(_pget("time_to_first_interaction_ms") or 0)) / math.log1p(30_000),
+            1.0,
+        ),
+
         # ── Categorical fields (raw strings for vocab lookup) ─────────────────
         "browser_family":  (ua.get("browser_family")  or "").lower().replace(" ", "_"),
         "os_family":       (ua.get("os_family")       or "").lower().replace(" ", "_"),
@@ -174,8 +208,11 @@ def _session_to_cat(session: dict) -> list[int]:
         except (ValueError, TypeError):
             page_hash_idx = 0
 
+    # Normalize ua-parser-js variant names before vocab lookup
+    browser = BROWSER_FAMILY_ALIASES.get(session["browser_family"], session["browser_family"])
+
     return [
-        BROWSER_VOCAB.get(session["browser_family"], 0),        # 0
+        BROWSER_VOCAB.get(browser, 0),                          # 0
         OS_VOCAB.get(session["os_family"], 0),                  # 1
         COUNTRY_VOCAB.get(session["ip_country"], 0),            # 2
         CLICK_ID_VOCAB.get(session["click_id_type"], 0),        # 3
@@ -242,6 +279,7 @@ def _event_to_cont(event: dict, session: dict) -> list[float]:
         session["prior_session_count"],                                        # 37
         session["ip_type"],                                                    # 38
         session["device_type"],                                                # 39
+        session["time_to_first_ms"],                                           # 40
     ]
 
 

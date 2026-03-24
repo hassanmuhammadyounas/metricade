@@ -1,11 +1,11 @@
 """
 BehavioralTransformer — session encoder.
-Input:  cont=[MAX_SEQ_LEN, N_CONT=40], cat=[N_CAT=8]
+Input:  cont=[MAX_SEQ_LEN, N_CONT=41], cat=[N_CAT=8]
 Output: 192-dim L2-normalised session vector (float32)
 
 Architecture:
   8 × nn.Embedding (74 total dims) → broadcast to seq_len
-  concat with cont (40 dims) → input_proj(114 → d_model=128)
+  concat with cont (41 dims) → input_proj(115 → d_model=128)
   CLS token + TransformerEncoder(nhead=4, layers=2)
   CLS output → output_proj(128 → 192) → L2 normalize
 """
@@ -27,7 +27,7 @@ _EMB_CONFIGS: list[tuple[int, int]] = [
     (4097,  16),   # 7: page_path_hash  (hash % 4096) + 1; 0=UNK
 ]
 _TOTAL_EMB_DIM = sum(d for _, d in _EMB_CONFIGS)   # 74
-_INPUT_DIM     = N_CONT + _TOTAL_EMB_DIM            # 40 + 74 = 114
+_INPUT_DIM     = N_CONT + _TOTAL_EMB_DIM            # 41 + 74 = 115
 
 
 class BehavioralTransformer(nn.Module):

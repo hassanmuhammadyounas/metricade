@@ -35,6 +35,9 @@ dist/
 packages/model-worker/models/*.pt
 packages/model-worker/models/*.ckpt
 packages/model-worker/models/
+packages/vector-worker/models/*.pt
+packages/vector-worker/models/*.ckpt
+packages/vector-worker/models/
 
 # Script outputs — never sync generated files or empty placeholder folders
 scripts/output/

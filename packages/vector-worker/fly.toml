@@ -1,0 +1,22 @@
+app    = "metricade-vector-worker"
+region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  CLICKHOUSE_HOST = "https://y390vosagc.us-east1.gcp.clickhouse.cloud:8443"
+  CLICKHOUSE_USER = "default"
+  POLL_INTERVAL_S = "300"
+
+# Secrets (fly secrets set — never here):
+# CLICKHOUSE_PASSWORD
+# UPSTASH_VECTOR_URL
+# UPSTASH_VECTOR_TOKEN
+
+[[vm]]
+  size   = "shared-cpu-1x"
+  memory = "512mb"
+
+[processes]
+  app = "python -m src.main"

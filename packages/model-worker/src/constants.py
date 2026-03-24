@@ -10,5 +10,5 @@ SPOT_CHECK_RATE = float(os.getenv("SPOT_CHECK_RATE", "0.01"))
 
 # Must match feature-worker exactly
 MAX_SEQ_LEN = 256
-N_CONT = 40
+N_CONT = 41
 N_CAT = 8

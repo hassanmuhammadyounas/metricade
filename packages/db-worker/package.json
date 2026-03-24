@@ -1,0 +1,20 @@
+{
+  "name": "metricade-db-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker — Metricade event store write path to ClickHouse",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.12.5",
+    "ua-parser-js": "^2.0.9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260313.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.70.0"
+  }
+}
