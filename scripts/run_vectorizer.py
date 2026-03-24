@@ -75,7 +75,7 @@ import httpx as _httpx
 
 from src.vectorizer import load_model, encode_session
 from src.clickhouse import (
-    get_all_orgs, get_sessions_updated_since, get_session_events, get_robust_params,
+    get_all_orgs, get_all_session_events, get_robust_params,
 )
 from src.upstash import build_vector_record, upsert_vectors
 from src.constants import DEFAULT_ROBUST
@@ -138,15 +138,18 @@ for org_id in orgs:
         print(f'  WARNING: robust params failed ({e}), using defaults')
         robust = DEFAULT_ROBUST
 
-    session_ids = get_sessions_updated_since(args.since, org_id=org_id)
-    print(f'  {len(session_ids)} sessions to process')
+    # Batch-fetch all events in one query (much faster than per-session queries)
+    print(f'  Fetching all events in one query...')
+    all_events = get_all_session_events(org_id, args.since)
+    n_sessions = len(all_events)
+    print(f'  {n_sessions} sessions to encode')
 
     records = []
     skipped = 0
+    UPSERT_EVERY = 100  # stream upserts to Upstash incrementally
 
-    for sid in session_ids:
+    for i, (sid, events) in enumerate(all_events.items(), 1):
         try:
-            events = get_session_events(sid)
             if not events:
                 skipped += 1
                 continue
@@ -173,11 +176,16 @@ for org_id in orgs:
             print(f'  ERROR session={sid}: {e}')
             skipped += 1
 
-    if records:
-        upsert_vectors(records)
-        total_upserted += len(records)
-        print(f'  Upserted {len(records)} vectors  (skipped={skipped})')
-    else:
-        print(f'  Nothing to upsert  (skipped={skipped})')
+        # Progress + incremental upsert every UPSERT_EVERY sessions
+        if i % UPSERT_EVERY == 0 or i == n_sessions:
+            pct = i / n_sessions * 100
+            print(f'  [{pct:5.1f}%] {i}/{n_sessions}  encoded={len(records)+skipped}  skipped={skipped}',
+                  flush=True)
+            if records:
+                upsert_vectors(records)
+                total_upserted += len(records)
+                records = []
+
+    print(f'  org done  total_upserted={total_upserted}  skipped={skipped}')
 
 print(f'\n[{ts()}] Done. Total upserted: {total_upserted}')

@@ -91,6 +91,43 @@ def get_session_events(session_id: str) -> list[dict]:
     return _query(sql)
 
 
+def get_all_session_events(org_id: str, since_iso: str = '2000-01-01 00:00:00') -> dict[str, list[dict]]:
+    """
+    Fetch ALL events for an org in a single query, grouped by session_id.
+    Returns { session_id: [event_dicts ordered by event_seq] }
+    Much faster than calling get_session_events() per session.
+    """
+    sql = f"""
+        SELECT
+            event_type, event_seq, delta_ms,
+            scroll_velocity_px_s, scroll_acceleration, scroll_depth_pct,
+            scroll_direction, y_reversal, scroll_pause_duration_ms,
+            patch_x, patch_y,
+            tap_interval_ms, tap_radius_x, tap_radius_y, tap_pressure,
+            dead_tap, long_press_duration_ms,
+            backgrounded_ms, active_ms, idle_duration_ms,
+            page_load_index,
+            viewport_w_norm, viewport_h_norm, device_pixel_ratio,
+            time_to_first_interaction_ms,
+            device_type, os_family, browser_family,
+            ip_type, ip_country,
+            hour_utc, day_of_week,
+            org_id, session_id, client_id, hostname
+        FROM events
+        WHERE org_id = '{org_id}'
+          AND received_at >= toDateTime64('{since_iso}', 3, 'UTC')
+        ORDER BY session_id, event_seq ASC
+    """
+    rows = _query(sql)
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        sid = row['session_id']
+        if sid not in grouped:
+            grouped[sid] = []
+        grouped[sid].append(row)
+    return grouped
+
+
 def get_robust_params(org_id: str | None = None) -> dict:
     """
     Compute robust scaling params (median, IQR) for all ROBUST_FEATURES
